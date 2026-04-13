@@ -193,6 +193,20 @@ function normalizeProduct(product) {
   };
 }
 
+function sanitizeImportedProduct(product) {
+  return normalizeProduct({
+    ...product,
+    nama: String(product.nama || "").trim(),
+    kategori: String(product.kategori || "").trim() || "Aksesoris Lainnya",
+    stok: Math.max(0, Number(product.stok || 0)),
+    stok_minimum: Math.max(0, Number(product.stok_minimum ?? 3)),
+    harga_beli: Math.max(0, Number(product.harga_beli || 0)),
+    harga_jual: Math.max(0, Number(product.harga_jual || 0)),
+    satuan: String(product.satuan || "pcs").trim() || "pcs",
+    aktif: product.aktif ?? true,
+  });
+}
+
 function normalizeStockLog(log) {
   return {
     ...log,
@@ -1235,6 +1249,114 @@ export function DataProvider({ children }) {
     ]
   );
 
+  const importProducts = useCallback(
+    async (payload) => {
+      if (!payload?.length) {
+        throw new Error("Belum ada produk valid untuk diimpor.");
+      }
+
+      const importedAt = new Date().toISOString();
+      const existingByCode = new Map(
+        products.map((product) => [normalizeProductCode(product.kode_produk), product])
+      );
+
+      const mergedProducts = payload.map((entry) => {
+        const importedProduct = sanitizeImportedProduct(entry);
+        if (!importedProduct.kode_produk) {
+          throw new Error("Setiap produk impor wajib memiliki kode atau barcode.");
+        }
+
+        const existingProduct = existingByCode.get(importedProduct.kode_produk);
+        return normalizeProduct({
+          ...existingProduct,
+          ...importedProduct,
+          id: existingProduct?.id || crypto.randomUUID(),
+          created_at: existingProduct?.created_at || importedAt,
+          stok_minimum: Number.isFinite(Number(entry.stok_minimum))
+            ? Math.max(0, Number(entry.stok_minimum))
+            : existingProduct?.stok_minimum ?? 3,
+          satuan: importedProduct.satuan || existingProduct?.satuan || "pcs",
+          aktif:
+            typeof entry.aktif === "boolean"
+              ? entry.aktif
+              : existingProduct?.aktif ?? importedProduct.aktif,
+        });
+      });
+
+      const createdCount = mergedProducts.filter(
+        (product) => !existingByCode.has(product.kode_produk)
+      ).length;
+      const updatedCount = mergedProducts.length - createdCount;
+
+      if (supabaseEnabled) {
+        for (let index = 0; index < mergedProducts.length; index += 200) {
+          const chunk = mergedProducts.slice(index, index + 200).map((product) => ({
+            id: product.id,
+            kode_produk: product.kode_produk,
+            nama: product.nama,
+            kategori: product.kategori,
+            stok: product.stok,
+            stok_minimum: product.stok_minimum,
+            harga_beli: product.harga_beli,
+            harga_jual: product.harga_jual,
+            satuan: product.satuan,
+            aktif: product.aktif,
+            created_at: product.created_at,
+          }));
+
+          const { error } = await supabase.from("produk").upsert(chunk);
+          if (error) throw error;
+        }
+
+        await loadData();
+        return {
+          total: mergedProducts.length,
+          created: createdCount,
+          updated: updatedCount,
+        };
+      }
+
+      const existingIds = new Set(products.map((product) => product.id));
+      const nextProductsMap = new Map(
+        mergedProducts.map((product) => [product.id, normalizeProduct(product)])
+      );
+      const nextProducts = [
+        ...mergedProducts
+          .filter((product) => !existingIds.has(product.id))
+          .map((product) => normalizeProduct(product)),
+        ...products.map((product) => nextProductsMap.get(product.id) || product),
+      ];
+
+      setProducts(nextProducts);
+      persistDemo({
+        products: nextProducts,
+        accessoryTransactions,
+        digitalTransactions,
+        walletTransactions,
+        logisticsTransactions,
+        cashEntries,
+        stockLogs,
+      });
+
+      return {
+        total: mergedProducts.length,
+        created: createdCount,
+        updated: updatedCount,
+      };
+    },
+    [
+      accessoryTransactions,
+      cashEntries,
+      digitalTransactions,
+      loadData,
+      logisticsTransactions,
+      persistDemo,
+      products,
+      stockLogs,
+      walletTransactions,
+    ]
+  );
+
   const updateProductStatus = useCallback(
     async (id, aktif) => {
       if (supabaseEnabled) {
@@ -1526,6 +1648,7 @@ export function DataProvider({ children }) {
       updateCashEntry,
       deleteCashEntry,
       saveProduct,
+      importProducts,
       updateProductStatus,
       addStock,
       saveStockMutation,
@@ -1546,6 +1669,7 @@ export function DataProvider({ children }) {
       deleteCashEntry,
       digitalTransactions,
       getDashboardSummary,
+      importProducts,
       logisticsTransactions,
       loadData,
       loading,

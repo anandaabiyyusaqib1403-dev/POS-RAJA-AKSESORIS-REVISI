@@ -7,7 +7,9 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
+        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+        display: ['"Space Grotesk"', 'sans-serif'],
+        mono: ['"IBM Plex Mono"', 'monospace'],
       },
       colors: {
         primary: {

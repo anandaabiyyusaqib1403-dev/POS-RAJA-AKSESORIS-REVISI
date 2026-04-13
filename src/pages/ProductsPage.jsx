@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useData } from "../contexts/DataContext";
 import { formatDateTime, formatPlainNumber, formatRupiah } from "../utils/format";
 import { productCategoryGroups } from "../data/productCategories";
+import { parseProductWorkbook } from "../utils/productImport";
 
 const emptyForm = {
   id: "",
@@ -84,6 +85,7 @@ export default function ProductsPage() {
     categories,
     stockMutations,
     saveProduct,
+    importProducts,
     updateProductStatus,
     saveStockMutation,
   } = useData();
@@ -94,6 +96,9 @@ export default function ProductsPage() {
   const [statusFilter, setStatusFilter] = useState("semua");
   const [mutationForm, setMutationForm] = useState(emptyMutationForm);
   const [showAllLogs, setShowAllLogs] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [lastImportSummary, setLastImportSummary] = useState(null);
+  const importInputRef = useRef(null);
 
   const activeCategoryGroup = productCategoryGroups.find((group) => group.slug === categoryGroup);
   const availableCategoryOptions = activeCategoryGroup ? activeCategoryGroup.categories : categories;
@@ -191,6 +196,31 @@ export default function ProductsPage() {
     }
   };
 
+  const triggerImportPicker = () => {
+    importInputRef.current?.click();
+  };
+
+  const handleImportWorkbook = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setImporting(true);
+    try {
+      const parsed = await parseProductWorkbook(file);
+      const result = await importProducts(parsed.products);
+      setLastImportSummary({
+        fileName: file.name,
+        ...parsed.summary,
+        ...result,
+      });
+    } catch (error) {
+      window.alert(error.message || "Gagal mengimpor file Excel.");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const displayedLogs = showAllLogs ? stockMutations : stockMutations.slice(0, 8);
 
   return (
@@ -251,6 +281,62 @@ export default function ProductsPage() {
             <h2 className="mt-2 text-3xl font-black text-[#1e3a5f]">
               {form.id ? "Edit Produk" : "Tambah Produk"}
             </h2>
+          </div>
+
+          <div className="mb-5 rounded-[28px] border border-dashed border-blue-200 bg-blue-50/70 p-4">
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleImportWorkbook}
+              className="hidden"
+            />
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Import master produk dari Excel</p>
+                <p className="mt-1 text-sm text-slate-600">
+                  Cocok untuk file Buku Konter dengan sheet <span className="font-semibold">Barang</span>.
+                  Barcode dipakai sebagai kode produk dan stok/harga akan ikut diperbarui.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={triggerImportPicker}
+                disabled={importing}
+                className="rounded-2xl bg-[#1e3a5f] px-4 py-3 text-sm font-semibold text-white hover:bg-[#15294a] disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {importing ? "Mengimpor..." : "Pilih File Excel"}
+              </button>
+            </div>
+            {lastImportSummary ? (
+              <div className="mt-4 grid gap-3 rounded-2xl bg-white/80 p-4 text-sm text-slate-600 md:grid-cols-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">File</p>
+                  <p className="mt-1 font-semibold text-slate-900">{lastImportSummary.fileName}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Hasil</p>
+                  <p className="mt-1 font-semibold text-emerald-700">
+                    {lastImportSummary.total} produk diproses
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tambah / Update</p>
+                  <p className="mt-1 font-semibold text-slate-900">
+                    {lastImportSummary.created} baru, {lastImportSummary.updated} diperbarui
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sheet</p>
+                  <p className="mt-1 font-semibold text-slate-900">
+                    {lastImportSummary.sheetName}
+                    {lastImportSummary.skippedRows
+                      ? ` • ${lastImportSummary.skippedRows} baris dilewati`
+                      : ""}
+                  </p>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">

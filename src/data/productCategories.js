@@ -7,12 +7,20 @@ export const productCategoryGroups = [
   {
     title: "Aksesori HP (Fast Moving)",
     slug: "aksesoris-hp",
-    categories: ["Charger", "Tempered Glass", "Casing", "Power Bank", "Earphone"],
+    categories: ["Charger", "Tempered Glass", "Casing", "Power Bank", "Earphone", "Kabel"],
   },
   {
     title: "Aksesori Pendukung",
     slug: "aksesoris-pendukung",
-    categories: ["Holder HP", "Tongsis", "Memory Card", "Flashdisk OTG", "Waterproof Case"],
+    categories: [
+      "Holder HP",
+      "Tongsis",
+      "Memory Card",
+      "Flashdisk OTG",
+      "Waterproof Case",
+      "Speaker",
+      "Aksesoris Lainnya",
+    ],
   },
   {
     title: "Layanan Transaksi",
