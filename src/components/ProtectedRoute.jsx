@@ -7,8 +7,8 @@ export default function ProtectedRoute({ allowedRoles, children }) {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100">
-        <div className="rounded-3xl bg-white px-6 py-4 text-sm font-semibold text-slate-700 shadow-lg">
+      <div className="flex min-h-screen items-center justify-center bg-[var(--brand-bg)]">
+        <div className="brand-panel px-6 py-4 text-sm font-semibold text-slate-700">
           Memuat sesi...
         </div>
       </div>

@@ -1,10 +1,14 @@
 import { useMemo, useRef, useState } from "react";
+import MetricCard from "../components/app/MetricCard";
+import PageHeader from "../components/app/PageHeader";
+import Panel from "../components/app/Panel";
 import { useData } from "../contexts/DataContext";
-import { formatDateTime, formatPlainNumber, formatRupiah } from "../utils/format";
+import { showNotification } from "../contexts/NotificationContext";
 import { productCategoryGroups } from "../data/productCategories";
+import { formatDateTime, formatRupiah } from "../utils/format";
 import { parseProductWorkbook } from "../utils/productImport";
 
-const emptyForm = {
+const baseEmptyForm = {
   id: "",
   kode_produk: "",
   nama: "",
@@ -17,7 +21,7 @@ const emptyForm = {
   aktif: true,
 };
 
-const emptyMutationForm = {
+const emptyMutation = {
   productId: "",
   tipe: "masuk",
   jumlah: "",
@@ -25,58 +29,48 @@ const emptyMutationForm = {
   catatan: "",
 };
 
-function StokBadge({ stok, stokMinimum }) {
-  if (stok === 0) {
-    return (
-      <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
-        Habis
-      </span>
-    );
-  }
+const quickStockMinimumOptions = ["1", "3", "5", "10"];
+const quickMutationAmounts = [1, 5, 10, 20];
+const preferredCategoryOrder = productCategoryGroups
+  .filter((group) => !["digital", "layanan-tambahan"].includes(group.slug))
+  .flatMap((group) => group.categories);
 
-  if (stok <= stokMinimum) {
-    return (
-      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
-        Menipis
-      </span>
-    );
-  }
-
-  return (
-    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-      Aman
-    </span>
-  );
+function createEmptyForm(overrides = {}) {
+  return { ...baseEmptyForm, ...overrides };
 }
 
-function MutationBadge({ tipe }) {
-  const styles = {
-    masuk: "bg-emerald-100 text-emerald-700",
-    keluar: "bg-rose-100 text-rose-700",
-    penyesuaian: "bg-amber-100 text-amber-700",
+function buildNextProductForm(currentForm) {
+  return createEmptyForm({
+    kategori: currentForm.kategori,
+    stok_minimum: currentForm.stok_minimum || "3",
+    satuan: currentForm.satuan || "pcs",
+  });
+}
+
+function focusElement(ref) {
+  if (typeof window === "undefined") return;
+  window.requestAnimationFrame(() => ref.current?.focus());
+}
+
+function getProductStatus(product) {
+  if (product.stok === 0) {
+    return {
+      label: "Habis",
+      className: "bg-slate-100 text-slate-500",
+    };
+  }
+
+  if (product.stok <= product.stok_minimum) {
+    return {
+      label: "Menipis",
+      className: "bg-[var(--brand-gold)]/18 text-[var(--brand-gold)]",
+    };
+  }
+
+  return {
+    label: "Aman",
+    className: "bg-[var(--brand-gold)]/10 text-[var(--brand-gold)]",
   };
-
-  return (
-    <span
-      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
-        styles[tipe] || "bg-slate-100 text-slate-700"
-      }`}
-    >
-      {tipe}
-    </span>
-  );
-}
-
-function getMutationHint(tipe) {
-  if (tipe === "masuk") {
-    return "Stok masuk untuk pembelian dari supplier. Isi jumlah positif.";
-  }
-
-  if (tipe === "keluar") {
-    return "Stok keluar manual selain penjualan kasir. Isi jumlah positif.";
-  }
-
-  return "Penyesuaian stok. Gunakan angka negatif untuk hilang/rusak, positif untuk koreksi tambah.";
 }
 
 export default function ProductsPage() {
@@ -89,19 +83,41 @@ export default function ProductsPage() {
     updateProductStatus,
     saveStockMutation,
   } = useData();
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(createEmptyForm());
+  const [mutation, setMutation] = useState(emptyMutation);
   const [search, setSearch] = useState("");
-  const [categoryGroup, setCategoryGroup] = useState("all");
-  const [categoryFilter, setCategoryFilter] = useState("Semua");
   const [statusFilter, setStatusFilter] = useState("semua");
-  const [mutationForm, setMutationForm] = useState(emptyMutationForm);
-  const [showAllLogs, setShowAllLogs] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState("semua");
   const [importing, setImporting] = useState(false);
-  const [lastImportSummary, setLastImportSummary] = useState(null);
-  const importInputRef = useRef(null);
+  const [notice, setNotice] = useState("");
+  const inputRef = useRef(null);
+  const productNameRef = useRef(null);
+  const mutationQuantityRef = useRef(null);
 
-  const activeCategoryGroup = productCategoryGroups.find((group) => group.slug === categoryGroup);
-  const availableCategoryOptions = activeCategoryGroup ? activeCategoryGroup.categories : categories;
+  const orderedCategories = useMemo(() => {
+    const available = [...new Set([...preferredCategoryOrder, ...categories])].filter(Boolean);
+
+    return available.sort((left, right) => {
+      const leftIndex = preferredCategoryOrder.indexOf(left);
+      const rightIndex = preferredCategoryOrder.indexOf(right);
+
+      if (leftIndex === -1 && rightIndex === -1) {
+        return left.localeCompare(right);
+      }
+      if (leftIndex === -1) return 1;
+      if (rightIndex === -1) return -1;
+      return leftIndex - rightIndex;
+    });
+  }, [categories]);
+
+  const categoryCounts = useMemo(
+    () =>
+      products.reduce((acc, product) => {
+        acc[product.kategori] = (acc[product.kategori] || 0) + 1;
+        return acc;
+      }, {}),
+    [products]
+  );
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
@@ -110,49 +126,40 @@ export default function ProductsPage() {
         product.nama.toLowerCase().includes(keyword) ||
         product.kategori.toLowerCase().includes(keyword) ||
         (product.kode_produk || "").toLowerCase().includes(keyword);
-      const matchGroup =
-        categoryGroup === "all" ||
-        activeCategoryGroup?.categories.includes(product.kategori);
-      const matchCategory = categoryFilter === "Semua" || product.kategori === categoryFilter;
       const matchStatus =
         statusFilter === "semua"
           ? true
-          : statusFilter === "habis"
-            ? product.stok === 0
-            : product.stok <= product.stok_minimum && product.stok > 0;
+          : statusFilter === "menipis"
+            ? product.stok > 0 && product.stok <= product.stok_minimum
+            : product.stok === 0;
+      const matchCategory =
+        categoryFilter === "semua" ? true : product.kategori === categoryFilter;
 
-      return matchSearch && matchGroup && matchCategory && matchStatus;
+      return matchSearch && matchStatus && matchCategory;
     });
-  }, [activeCategoryGroup, categoryFilter, categoryGroup, products, search, statusFilter]);
+  }, [products, search, statusFilter, categoryFilter]);
 
-  const inventoryStats = useMemo(() => {
-    const totalNilai = products.reduce((sum, product) => sum + product.harga_beli * product.stok, 0);
-    const totalNilaiJual = products.reduce(
-      (sum, product) => sum + product.harga_jual * product.stok,
-      0
-    );
-    const jumlahHabis = products.filter((product) => product.stok === 0).length;
-    const jumlahMenipis = products.filter(
-      (product) => product.stok > 0 && product.stok <= product.stok_minimum
-    ).length;
-
-    return {
-      totalNilai,
-      totalNilaiJual,
-      jumlahHabis,
-      jumlahMenipis,
+  const stats = useMemo(
+    () => ({
       totalProduk: products.length,
-    };
-  }, [products]);
+      stokMenipis: products.filter((item) => item.stok > 0 && item.stok <= item.stok_minimum)
+        .length,
+      stokHabis: products.filter((item) => item.stok === 0).length,
+      nilaiStok: products.reduce((sum, item) => sum + item.harga_beli * item.stok, 0),
+    }),
+    [products]
+  );
 
-  const margin = useMemo(() => {
-    const beli = Number(form.harga_beli || 0);
-    const jual = Number(form.harga_jual || 0);
-    if (!beli) return 0;
-    return ((jual - beli) / beli) * 100;
-  }, [form.harga_beli, form.harga_jual]);
+  const lowStockPreview = useMemo(
+    () =>
+      products
+        .filter((product) => product.stok > 0 && product.stok <= product.stok_minimum)
+        .slice(0, 4),
+    [products]
+  );
 
   const editProduct = (product) => {
+    setNotice("");
     setForm({
       id: product.id,
       kode_produk: product.kode_produk || "",
@@ -162,45 +169,72 @@ export default function ProductsPage() {
       harga_jual: String(product.harga_jual),
       stok: String(product.stok),
       stok_minimum: String(product.stok_minimum),
-      satuan: product.satuan,
+      satuan: product.satuan || "pcs",
       aktif: product.aktif,
     });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    focusElement(productNameRef);
   };
 
-  const submitProduct = async (event) => {
+  const prepareStockMutation = (product) => {
+    setNotice(`Form mutasi siap untuk ${product.nama}.`);
+    setMutation({
+      productId: product.id,
+      tipe: "masuk",
+      jumlah: "",
+      referensi: "",
+      catatan: `Tambah stok ${product.nama}`,
+    });
+    focusElement(mutationQuantityRef);
+  };
+
+  const resetProductForm = () => {
+    setForm(buildNextProductForm(form));
+    focusElement(productNameRef);
+  };
+
+  const handleProductSubmit = async (event) => {
     event.preventDefault();
+    const isEditing = Boolean(form.id);
+
     try {
       await saveProduct(form);
-      setForm(emptyForm);
+      setNotice(
+        isEditing
+          ? `Produk ${form.nama} berhasil diperbarui.`
+          : `Produk ${form.nama} berhasil ditambahkan. Barcode kosong akan dibuat otomatis.`
+      );
+      setForm(buildNextProductForm(form));
+      focusElement(productNameRef);
     } catch (error) {
-      window.alert(error.message || "Gagal menyimpan produk.");
+      showNotification("error", error.message || "Gagal menyimpan produk.");
     }
   };
 
-  const submitMutation = async (event) => {
+  const handleMutationSubmit = async (event) => {
     event.preventDefault();
-    if (!mutationForm.productId || !mutationForm.jumlah) return;
+
+    const targetProduct = products.find((product) => product.id === mutation.productId);
 
     try {
       await saveStockMutation({
-        productId: mutationForm.productId,
-        tipe: mutationForm.tipe,
-        jumlah: Number(mutationForm.jumlah),
-        referensi: mutationForm.referensi,
-        catatan: mutationForm.catatan,
+        productId: mutation.productId,
+        tipe: mutation.tipe,
+        jumlah: Number(mutation.jumlah),
+        referensi: mutation.referensi,
+        catatan: mutation.catatan,
       });
-      setMutationForm(emptyMutationForm);
+      setNotice(
+        targetProduct
+          ? `Mutasi stok untuk ${targetProduct.nama} berhasil disimpan.`
+          : "Mutasi stok berhasil disimpan."
+      );
+      setMutation(emptyMutation);
     } catch (error) {
-      window.alert(error.message || "Gagal menyimpan mutasi stok.");
+      showNotification("error", error.message || "Gagal menyimpan mutasi stok.");
     }
   };
 
-  const triggerImportPicker = () => {
-    importInputRef.current?.click();
-  };
-
-  const handleImportWorkbook = async (event) => {
+  const handleImport = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
@@ -209,240 +243,168 @@ export default function ProductsPage() {
     try {
       const parsed = await parseProductWorkbook(file);
       const result = await importProducts(parsed.products);
-      setLastImportSummary({
-        fileName: file.name,
-        ...parsed.summary,
-        ...result,
-      });
+      setNotice(
+        `Import selesai: ${result?.created || 0} produk baru, ${result?.updated || 0} diperbarui dari ${parsed.summary.importedRows} baris valid.`
+      );
     } catch (error) {
-      window.alert(error.message || "Gagal mengimpor file Excel.");
+      showNotification("error", error.message || "Gagal impor produk.");
     } finally {
       setImporting(false);
     }
   };
 
-  const displayedLogs = showAllLogs ? stockMutations : stockMutations.slice(0, 8);
-
   return (
     <div className="space-y-6">
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        {[
-          { label: "Total Produk", value: inventoryStats.totalProduk, suffix: "jenis" },
-          { label: "Nilai Modal Stok", value: formatRupiah(inventoryStats.totalNilai), raw: true },
-          {
-            label: "Nilai Jual Stok",
-            value: formatRupiah(inventoryStats.totalNilaiJual),
-            raw: true,
-          },
-          {
-            label: "Stok Menipis",
-            value: inventoryStats.jumlahMenipis,
-            suffix: "produk",
-            warn: inventoryStats.jumlahMenipis > 0,
-          },
-          {
-            label: "Stok Habis",
-            value: inventoryStats.jumlahHabis,
-            suffix: "produk",
-            danger: inventoryStats.jumlahHabis > 0,
-          },
-        ].map(({ label, value, suffix, raw, warn, danger }) => (
-          <div
-            key={label}
-            className={`rounded-[24px] border p-4 shadow-sm ${
-              danger
-                ? "border-red-200 bg-red-50"
-                : warn
-                  ? "border-amber-200 bg-amber-50"
-                  : "border-slate-200 bg-white"
-            }`}
-          >
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-            <p
-              className={`mt-2 text-xl font-black ${
-                danger ? "text-red-700" : warn ? "text-amber-700" : "text-slate-900"
-              }`}
-            >
-              {raw ? value : `${value}${suffix ? ` ${suffix}` : ""}`}
-            </p>
-          </div>
-        ))}
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[1fr_1.2fr]">
-        <form
-          onSubmit={submitProduct}
-          className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm"
-        >
-          <div className="mb-5">
-            <p className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500">
-              Manajemen Produk
-            </p>
-            <h2 className="mt-2 text-3xl font-black text-[#1e3a5f]">
-              {form.id ? "Edit Produk" : "Tambah Produk"}
-            </h2>
-          </div>
-
-          <div className="mb-5 rounded-[28px] border border-dashed border-blue-200 bg-blue-50/70 p-4">
+      <PageHeader
+        eyebrow="Inventory"
+        title="Stok barang"
+        description="Saya rapikan supaya owner bisa tambah produk, pilih kategori, dan isi stok jauh lebih cepat tanpa banyak langkah."
+        icon="box"
+        actions={
+          <>
             <input
-              ref={importInputRef}
+              ref={inputRef}
               type="file"
               accept=".xlsx,.xls"
-              onChange={handleImportWorkbook}
+              onChange={handleImport}
               className="hidden"
             />
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">Import master produk dari Excel</p>
-                <p className="mt-1 text-sm text-slate-600">
-                  Cocok untuk file Buku Konter dengan sheet <span className="font-semibold">Barang</span>.
-                  Barcode dipakai sebagai kode produk dan stok/harga akan ikut diperbarui.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={triggerImportPicker}
-                disabled={importing}
-                className="rounded-2xl bg-[#1e3a5f] px-4 py-3 text-sm font-semibold text-white hover:bg-[#15294a] disabled:cursor-not-allowed disabled:bg-slate-300"
-              >
-                {importing ? "Mengimpor..." : "Pilih File Excel"}
-              </button>
-            </div>
-            {lastImportSummary ? (
-              <div className="mt-4 grid gap-3 rounded-2xl bg-white/80 p-4 text-sm text-slate-600 md:grid-cols-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">File</p>
-                  <p className="mt-1 font-semibold text-slate-900">{lastImportSummary.fileName}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Hasil</p>
-                  <p className="mt-1 font-semibold text-emerald-700">
-                    {lastImportSummary.total} produk diproses
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tambah / Update</p>
-                  <p className="mt-1 font-semibold text-slate-900">
-                    {lastImportSummary.created} baru, {lastImportSummary.updated} diperbarui
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sheet</p>
-                  <p className="mt-1 font-semibold text-slate-900">
-                    {lastImportSummary.sheetName}
-                    {lastImportSummary.skippedRows
-                      ? ` • ${lastImportSummary.skippedRows} baris dilewati`
-                      : ""}
-                  </p>
-                </div>
-              </div>
-            ) : null}
-          </div>
+            <button
+              type="button"
+              onClick={() => {
+                setForm(createEmptyForm({ kategori: form.kategori || "", stok_minimum: "3" }));
+                focusElement(productNameRef);
+              }}
+              className="brand-button-primary"
+            >
+              Tambah Produk
+            </button>
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="brand-button-secondary"
+            >
+              {importing ? "Mengimpor..." : "Import Excel"}
+            </button>
+          </>
+        }
+      />
 
-          <div className="grid gap-4 md:grid-cols-2">
+      {notice ? (
+        <Panel className="border-[var(--brand-gold)]/18 bg-[var(--brand-gold)]/10 px-5 py-4">
+          <p className="text-sm font-semibold text-slate-900">{notice}</p>
+        </Panel>
+      ) : null}
+
+      <div className="grid gap-4 xl:grid-cols-4">
+        <MetricCard label="Total produk" value={String(stats.totalProduk)} />
+        <MetricCard label="Stok menipis" value={String(stats.stokMenipis)} accent="gold" />
+        <MetricCard label="Stok habis" value={String(stats.stokHabis)} accent="danger" />
+        <MetricCard label="Nilai stok" value={formatRupiah(stats.nilaiStok)} />
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <Panel className="p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">Kode Produk</label>
-              <input
-                value={form.kode_produk}
-                onChange={(event) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    kode_produk: event.target.value.toUpperCase(),
-                  }))
-                }
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 uppercase outline-none focus:border-[#1e3a5f] focus:ring-4 focus:ring-blue-100"
-                placeholder="Contoh: BRD-001-A15"
-                required
-              />
-              <p className="mt-1 text-xs text-slate-500">
-                Pakai kode produk yang sudah ada agar gampang dicari atau di-scan.
+              <h3 className="font-display text-2xl font-bold tracking-tight text-slate-950">
+                {form.id ? "Edit produk" : "Tambah produk lebih cepat"}
+              </h3>
+              <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-600">
+                Isi nama, pilih kategori, harga, dan stok. Kalau barcode belum ada, biarkan kosong
+                lalu sistem akan buatkan kode produk otomatis saat disimpan.
               </p>
             </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">Kategori</label>
-              <input
-                list="kategori-list"
-                value={form.kategori}
-                onChange={(event) => setForm((prev) => ({ ...prev, kategori: event.target.value }))}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-[#1e3a5f] focus:ring-4 focus:ring-blue-100"
-                required
-              />
-              <datalist id="kategori-list">
-                {categories.map((category) => (
-                  <option key={category} value={category} />
-                ))}
-              </datalist>
+            <div className="rounded-3xl border border-[var(--brand-gold)]/16 bg-[var(--brand-gold)]/8 px-4 py-3 text-sm text-slate-700">
+              <p className="font-semibold text-slate-950">Tips cepat</p>
+              <p className="mt-1 leading-6">
+                Setelah simpan, kategori dan stok minimum tetap dipertahankan supaya tambah barang
+                berikutnya lebih cepat.
+              </p>
             </div>
+          </div>
 
-            <div className="md:col-span-2">
-              <label className="mb-2 block text-sm font-semibold text-slate-700">Nama Produk</label>
-              <input
-                value={form.nama}
-                onChange={(event) => setForm((prev) => ({ ...prev, nama: event.target.value }))}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-[#1e3a5f] focus:ring-4 focus:ring-blue-100"
-                required
-              />
+          <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+              Kategori cepat
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {orderedCategories.map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => setForm((prev) => ({ ...prev, kategori: category }))}
+                  className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
+                    form.kategori === category
+                      ? "bg-[var(--brand-gold)] text-slate-950"
+                      : "border border-slate-200 bg-white text-slate-600 hover:border-[var(--brand-gold)]/24 hover:bg-[var(--brand-gold)]/10"
+                  }`}
+                >
+                  {category}
+                  <span className="ml-2 text-[10px] opacity-70">
+                    {categoryCounts[category] || 0}
+                  </span>
+                </button>
+              ))}
             </div>
+          </div>
 
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">Satuan</label>
-              <input
-                value={form.satuan}
-                onChange={(event) => setForm((prev) => ({ ...prev, satuan: event.target.value }))}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-[#1e3a5f] focus:ring-4 focus:ring-blue-100"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">
-                Harga Beli (Rp)
-              </label>
-              <input
-                type="number"
-                min="0"
-                value={form.harga_beli}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, harga_beli: event.target.value }))
-                }
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-[#1e3a5f] focus:ring-4 focus:ring-blue-100"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">
-                Harga Jual (Rp)
-              </label>
-              <input
-                type="number"
-                min="0"
-                value={form.harga_jual}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, harga_jual: event.target.value }))
-                }
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-[#1e3a5f] focus:ring-4 focus:ring-blue-100"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">Stok Awal</label>
-              <input
-                type="number"
-                min="0"
-                value={form.stok}
-                onChange={(event) => setForm((prev) => ({ ...prev, stok: event.target.value }))}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-[#1e3a5f] focus:ring-4 focus:ring-blue-100"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">
-                Stok Minimum
-              </label>
+          <form onSubmit={handleProductSubmit} className="mt-5 grid gap-4 md:grid-cols-2">
+            <input
+              ref={productNameRef}
+              value={form.nama}
+              onChange={(event) => setForm((prev) => ({ ...prev, nama: event.target.value }))}
+              className="brand-input md:col-span-2"
+              placeholder="Nama produk"
+              required
+            />
+            <input
+              list="kategori-produk"
+              value={form.kategori}
+              onChange={(event) => setForm((prev) => ({ ...prev, kategori: event.target.value }))}
+              className="brand-input"
+              placeholder="Kategori"
+              required
+            />
+            <datalist id="kategori-produk">
+              {orderedCategories.map((category) => (
+                <option key={category} value={category} />
+              ))}
+            </datalist>
+            <input
+              value={form.kode_produk}
+              onChange={(event) => setForm((prev) => ({ ...prev, kode_produk: event.target.value }))}
+              className="brand-input"
+              placeholder="Barcode / kode produk (opsional)"
+            />
+            <input
+              type="number"
+              min="0"
+              value={form.harga_jual}
+              onChange={(event) => setForm((prev) => ({ ...prev, harga_jual: event.target.value }))}
+              className="brand-input"
+              placeholder="Harga jual"
+              required
+            />
+            <input
+              type="number"
+              min="0"
+              value={form.harga_beli}
+              onChange={(event) => setForm((prev) => ({ ...prev, harga_beli: event.target.value }))}
+              className="brand-input"
+              placeholder="Harga modal"
+              required
+            />
+            <input
+              type="number"
+              min="0"
+              value={form.stok}
+              onChange={(event) => setForm((prev) => ({ ...prev, stok: event.target.value }))}
+              className="brand-input"
+              placeholder="Stok awal"
+              required
+            />
+            <div className="space-y-3">
               <input
                 type="number"
                 min="0"
@@ -450,381 +412,291 @@ export default function ProductsPage() {
                 onChange={(event) =>
                   setForm((prev) => ({ ...prev, stok_minimum: event.target.value }))
                 }
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-[#1e3a5f] focus:ring-4 focus:ring-blue-100"
+                className="brand-input"
+                placeholder="Stok minimum"
                 required
               />
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
-            Margin: {Number.isFinite(margin) ? `${margin.toFixed(1)}%` : "0%"}
-            {form.harga_beli && form.harga_jual ? (
-              <span className="ml-2 font-normal text-emerald-600">
-                (untung {formatRupiah(Number(form.harga_jual) - Number(form.harga_beli))} / item)
-              </span>
-            ) : null}
-          </div>
-
-          <div className="mt-5 flex gap-3">
-            <button
-              type="submit"
-              className="flex-1 rounded-2xl bg-[#1e3a5f] px-4 py-3 text-sm font-semibold text-white hover:bg-[#15294a]"
-            >
-              {form.id ? "Update Produk" : "Tambah Produk"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setForm(emptyForm)}
-              className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700"
-            >
-              Reset
-            </button>
-          </div>
-        </form>
-
-        <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-2xl font-black text-[#1e3a5f]">Mutasi Stok</h3>
-          <p className="mt-1 text-sm text-slate-500">
-            Catat stok masuk, stok keluar manual, dan penyesuaian. Penjualan kasir otomatis masuk
-            sebagai stok keluar.
-          </p>
-
-          <form
-            onSubmit={submitMutation}
-            className="mt-5 grid gap-4 md:grid-cols-2"
-          >
-            <div className="md:col-span-2">
-              <label className="mb-2 block text-sm font-semibold text-slate-700">Produk</label>
-              <select
-                value={mutationForm.productId}
-                onChange={(event) =>
-                  setMutationForm((prev) => ({ ...prev, productId: event.target.value }))
-                }
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-[#1e3a5f] focus:ring-4 focus:ring-blue-100"
-                required
-              >
-                <option value="">Pilih produk</option>
-                {products.map((product) => (
-                  <option key={product.id} value={product.id}>
-                    {product.kode_produk ? `${product.kode_produk} - ` : ""}
-                    {product.nama} (stok: {product.stok})
-                  </option>
+              <div className="flex flex-wrap gap-2">
+                {quickStockMinimumOptions.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setForm((prev) => ({ ...prev, stok_minimum: value }))}
+                    className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                      form.stok_minimum === value
+                        ? "bg-[var(--brand-gold)] text-slate-950"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    Min {value}
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">Jenis Mutasi</label>
+            <div className="md:col-span-2 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
               <select
-                value={mutationForm.tipe}
-                onChange={(event) =>
-                  setMutationForm((prev) => ({ ...prev, tipe: event.target.value }))
-                }
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-[#1e3a5f] focus:ring-4 focus:ring-blue-100"
+                value={form.satuan}
+                onChange={(event) => setForm((prev) => ({ ...prev, satuan: event.target.value }))}
+                className="brand-select"
               >
-                <option value="masuk">Stok Masuk</option>
-                <option value="keluar">Stok Keluar</option>
-                <option value="penyesuaian">Penyesuaian</option>
+                <option value="pcs" className="bg-white">
+                  pcs
+                </option>
+                <option value="unit" className="bg-white">
+                  unit
+                </option>
+                <option value="pack" className="bg-white">
+                  pack
+                </option>
+                <option value="set" className="bg-white">
+                  set
+                </option>
               </select>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">
-                {mutationForm.tipe === "penyesuaian" ? "Perubahan Stok" : "Jumlah"}
-              </label>
-              <input
-                type="number"
-                value={mutationForm.jumlah}
-                onChange={(event) =>
-                  setMutationForm((prev) => ({ ...prev, jumlah: event.target.value }))
-                }
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-[#1e3a5f] focus:ring-4 focus:ring-blue-100"
-                placeholder={mutationForm.tipe === "penyesuaian" ? "Contoh: -2 atau 3" : "Jumlah"}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">Referensi</label>
-              <input
-                value={mutationForm.referensi}
-                onChange={(event) =>
-                  setMutationForm((prev) => ({ ...prev, referensi: event.target.value }))
-                }
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-[#1e3a5f] focus:ring-4 focus:ring-blue-100"
-                placeholder="Misal: INV-001 / Penjualan Tokped"
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">Catatan</label>
-              <input
-                value={mutationForm.catatan}
-                onChange={(event) =>
-                  setMutationForm((prev) => ({ ...prev, catatan: event.target.value }))
-                }
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-[#1e3a5f] focus:ring-4 focus:ring-blue-100"
-                placeholder="Supplier / rusak / hilang / koreksi"
-              />
-            </div>
-
-            <div className="md:col-span-2 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              {getMutationHint(mutationForm.tipe)}
-            </div>
-
-            <div className="md:col-span-2">
+              <button type="submit" className="brand-button-primary">
+                {form.id ? "Update Produk" : "Simpan Produk"}
+              </button>
               <button
-                type="submit"
-                className="w-full rounded-2xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-600"
+                type="button"
+                onClick={resetProductForm}
+                className="brand-button-secondary"
               >
-                Simpan Mutasi
+                Reset
               </button>
             </div>
           </form>
+        </Panel>
 
-          <div className="mt-5">
-            <div className="mb-3 flex items-center justify-between">
-              <h4 className="text-sm font-semibold text-slate-700">Riwayat Mutasi Stok</h4>
-              <span className="text-xs text-slate-400">{stockMutations.length} entri</span>
+        <Panel variant="strong" className="p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h3 className="font-display text-2xl font-bold tracking-tight text-slate-950">
+                Mutasi stok
+              </h3>
+              <p className="mt-2 text-sm leading-7 text-slate-600">
+                Pilih barang lalu isi jumlah. Untuk tambah stok harian, tombol cepat di tabel bisa
+                langsung mengisi produk ke form ini.
+              </p>
             </div>
-            <div className="space-y-2 overflow-y-auto" style={{ maxHeight: "360px" }}>
-              {stockMutations.length === 0 ? (
-                <p className="py-4 text-center text-sm text-slate-500">Belum ada riwayat mutasi stok.</p>
-              ) : (
-                displayedLogs.map((log) => {
-                  const product = products.find((productItem) => productItem.id === log.produk_id);
-                  const amountClass =
-                    log.jumlah > 0 ? "text-emerald-700 bg-emerald-100" : "text-rose-700 bg-rose-100";
-
-                  return (
-                    <div
-                      key={log.id}
-                      className="flex items-start justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="mb-1 flex flex-wrap items-center gap-2">
-                          <MutationBadge tipe={log.tipe} />
-                          <p className="text-sm font-semibold text-slate-900">
-                            {product?.nama || "Produk dihapus"}
-                          </p>
-                          {product?.kode_produk ? (
-                            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
-                              {product.kode_produk}
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="text-xs text-slate-500">
-                          {formatDateTime(log.created_at, {
-                            dateStyle: "short",
-                            timeStyle: "short",
-                          })}
-                          {log.referensi ? ` | ${log.referensi}` : ""}
-                        </p>
-                        {log.catatan ? (
-                          <p className="mt-1 text-xs text-slate-600">{log.catatan}</p>
-                        ) : null}
-                      </div>
-                      <div className="text-right">
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-sm font-bold ${amountClass}`}
-                        >
-                          {log.jumlah > 0 ? "+" : ""}
-                          {formatPlainNumber(log.jumlah)}
-                        </span>
-                        {typeof log.stok_sebelum === "number" && typeof log.stok_sesudah === "number" ? (
-                          <p className="mt-1 text-[11px] text-slate-500">
-                            {log.stok_sebelum} -&gt; {log.stok_sesudah}
-                          </p>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-            {stockMutations.length > 8 ? (
-              <button
-                type="button"
-                onClick={() => setShowAllLogs((value) => !value)}
-                className="mt-3 w-full rounded-2xl bg-slate-100 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-200"
-              >
-                {showAllLogs ? "Tampilkan lebih sedikit" : `Lihat semua (${stockMutations.length})`}
-              </button>
+            {lowStockPreview.length ? (
+              <div className="rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+                <p className="font-semibold text-slate-950">Perlu isi ulang</p>
+                <div className="mt-2 space-y-1">
+                  {lowStockPreview.map((product) => (
+                    <p key={product.id}>
+                      {product.nama}
+                      <span className="ml-2 text-slate-500">stok {product.stok}</span>
+                    </p>
+                  ))}
+                </div>
+              </div>
             ) : null}
           </div>
-        </div>
-      </section>
 
-      <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="mb-5 flex flex-col gap-4">
-          <div>
-            <h3 className="text-2xl font-black text-[#1e3a5f]">Daftar Produk</h3>
-            <p className="text-sm text-slate-500">
-              {filteredProducts.length} dari {products.length} produk ditampilkan
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setCategoryGroup("all");
-                setCategoryFilter("Semua");
-              }}
-              className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                categoryGroup === "all"
-                  ? "bg-[#1e3a5f] text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              Semua
-            </button>
-            {productCategoryGroups.map((group) => (
-              <button
-                key={group.slug}
-                type="button"
-                onClick={() => {
-                  setCategoryGroup(group.slug);
-                  setCategoryFilter("Semua");
-                }}
-                className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                  categoryGroup === group.slug
-                    ? "bg-[#1e3a5f] text-white"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                {group.title}
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Cari nama, kategori, atau kode produk..."
-              className="rounded-2xl border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-[#1e3a5f] focus:ring-4 focus:ring-blue-100"
-            />
+          <form onSubmit={handleMutationSubmit} className="mt-5 grid gap-4 md:grid-cols-2">
             <select
-              value={categoryFilter}
-              onChange={(event) => setCategoryFilter(event.target.value)}
-              className="rounded-2xl border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-[#1e3a5f] focus:ring-4 focus:ring-blue-100"
+              value={mutation.productId}
+              onChange={(event) => setMutation((prev) => ({ ...prev, productId: event.target.value }))}
+              className="brand-select md:col-span-2"
+              required
             >
-              <option value="Semua">Semua kategori</option>
-              {availableCategoryOptions.map((category) => (
-                <option key={category} value={category}>
-                  {category}
+              <option value="" className="bg-white">
+                Pilih produk
+              </option>
+              {products.map((product) => (
+                <option key={product.id} value={product.id} className="bg-white">
+                  {product.nama} ({product.stok})
                 </option>
               ))}
             </select>
             <select
+              value={mutation.tipe}
+              onChange={(event) => setMutation((prev) => ({ ...prev, tipe: event.target.value }))}
+              className="brand-select"
+            >
+              <option value="masuk" className="bg-white">
+                Stok Masuk
+              </option>
+              <option value="keluar" className="bg-white">
+                Stok Keluar
+              </option>
+              <option value="penyesuaian" className="bg-white">
+                Penyesuaian
+              </option>
+            </select>
+            <div className="space-y-3">
+              <input
+                ref={mutationQuantityRef}
+                type="number"
+                value={mutation.jumlah}
+                onChange={(event) => setMutation((prev) => ({ ...prev, jumlah: event.target.value }))}
+                className="brand-input"
+                placeholder="Jumlah"
+                required
+              />
+              <div className="flex flex-wrap gap-2">
+                {quickMutationAmounts.map((amount) => (
+                  <button
+                    key={amount}
+                    type="button"
+                    onClick={() => setMutation((prev) => ({ ...prev, jumlah: String(amount) }))}
+                    className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                      mutation.jumlah === String(amount)
+                        ? "bg-[var(--brand-gold)] text-slate-950"
+                        : "bg-white text-slate-600"
+                    }`}
+                  >
+                    {amount}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <input
+              value={mutation.referensi}
+              onChange={(event) =>
+                setMutation((prev) => ({ ...prev, referensi: event.target.value }))
+              }
+              className="brand-input"
+              placeholder="Referensi"
+            />
+            <input
+              value={mutation.catatan}
+              onChange={(event) => setMutation((prev) => ({ ...prev, catatan: event.target.value }))}
+              className="brand-input"
+              placeholder="Catatan"
+            />
+            <button type="submit" className="brand-button-success md:col-span-2">
+              Simpan Mutasi
+            </button>
+          </form>
+
+          <div
+            className="brand-scrollbar mt-6 space-y-3 overflow-y-auto pr-1"
+            style={{ maxHeight: "300px" }}
+          >
+            {stockMutations.slice(0, 6).map((log) => (
+              <div
+                key={log.id}
+                className="rounded-2xl border border-[var(--brand-gold)]/12 bg-[var(--brand-gold)]/8 px-4 py-4"
+              >
+                <p className="text-sm font-semibold text-slate-950">
+                  {log.referensi || "Mutasi stok"}
+                </p>
+                <p className="mt-1 text-sm text-slate-600">{log.catatan || "Tanpa catatan"}</p>
+                <p className="mt-2 text-xs text-slate-500">
+                  {formatDateTime(log.created_at, { dateStyle: "medium", timeStyle: "short" })}
+                </p>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
+      <Panel className="p-6">
+        <div className="mb-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="grid gap-3 md:grid-cols-[1.3fr_180px_220px]">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="brand-input"
+              placeholder="Cari barcode, nama barang, atau kategori..."
+            />
+            <select
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value)}
-              className="rounded-2xl border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-[#1e3a5f] focus:ring-4 focus:ring-blue-100"
+              className="brand-select"
             >
-              <option value="semua">Semua status</option>
-              <option value="menipis">Menipis</option>
-              <option value="habis">Habis</option>
+              <option value="semua" className="bg-white">
+                Semua status
+              </option>
+              <option value="menipis" className="bg-white">
+                Menipis
+              </option>
+              <option value="habis" className="bg-white">
+                Habis
+              </option>
+            </select>
+            <select
+              value={categoryFilter}
+              onChange={(event) => setCategoryFilter(event.target.value)}
+              className="brand-select"
+            >
+              <option value="semua" className="bg-white">
+                Semua kategori
+              </option>
+              {orderedCategories.map((category) => (
+                <option key={category} value={category} className="bg-white">
+                  {category}
+                </option>
+              ))}
             </select>
           </div>
+          <p className="text-sm text-slate-600">{filteredProducts.length} produk tampil</p>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
+        <div className="brand-scrollbar overflow-x-auto">
+          <table className="brand-table">
             <thead>
-              <tr className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                <th className="px-3 py-3">Kode</th>
-                <th className="px-3 py-3">Nama</th>
-                <th className="px-3 py-3">Kategori</th>
-                <th className="px-3 py-3">Status</th>
-                <th className="px-3 py-3 text-center">Stok</th>
-                <th className="px-3 py-3 text-center">Min</th>
-                <th className="px-3 py-3 text-right">Harga Beli</th>
-                <th className="px-3 py-3 text-right">Harga Jual</th>
-                <th className="px-3 py-3 text-right">Margin</th>
-                <th className="px-3 py-3 text-right">Nilai Stok</th>
-                <th className="px-3 py-3">Aksi</th>
+              <tr>
+                <th>Barcode</th>
+                <th>Nama Barang</th>
+                <th>Stok</th>
+                <th>Harga Modal</th>
+                <th>Harga Jual</th>
+                <th>Status</th>
+                <th className="text-right">Aksi</th>
               </tr>
             </thead>
             <tbody>
-              {filteredProducts.length === 0 ? (
-                <tr>
-                  <td colSpan={11} className="px-3 py-8 text-center text-slate-500">
-                    Tidak ada produk yang cocok.
-                  </td>
-                </tr>
-              ) : (
-                filteredProducts.map((product) => {
-                  const danger = product.stok === 0;
-                  const warn = product.stok > 0 && product.stok <= product.stok_minimum;
-                  const marginPercent = product.harga_beli
-                    ? ((product.harga_jual - product.harga_beli) / product.harga_beli) * 100
-                    : 0;
-                  const nilaiStok = product.harga_beli * product.stok;
+              {filteredProducts.map((product) => {
+                const status = getProductStatus(product);
 
-                  return (
-                    <tr
-                      key={product.id}
-                      className={`border-t ${
-                        danger
-                          ? "border-red-100 bg-red-50/60"
-                          : warn
-                            ? "border-amber-100 bg-amber-50/60"
-                            : "border-slate-100"
-                      }`}
-                    >
-                      <td className="px-3 py-3">
-                        <span className="rounded-full bg-slate-100 px-2.5 py-1 font-mono text-xs font-semibold text-slate-700">
-                          {product.kode_produk || "-"}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 font-semibold text-slate-900">{product.nama}</td>
-                      <td className="px-3 py-3 text-slate-600">{product.kategori}</td>
-                      <td className="px-3 py-3">
-                        <StokBadge stok={product.stok} stokMinimum={product.stok_minimum} />
-                      </td>
-                      <td className="px-3 py-3 text-center font-bold text-slate-900">
-                        {product.stok}
-                      </td>
-                      <td className="px-3 py-3 text-center text-slate-500">
-                        {product.stok_minimum}
-                      </td>
-                      <td className="px-3 py-3 text-right">{formatRupiah(product.harga_beli)}</td>
-                      <td className="px-3 py-3 text-right">{formatRupiah(product.harga_jual)}</td>
-                      <td className="px-3 py-3 text-right font-semibold text-emerald-600">
-                        {marginPercent.toFixed(1)}%
-                      </td>
-                      <td className="px-3 py-3 text-right text-slate-600">
-                        {formatRupiah(nilaiStok)}
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => editProduct(product)}
-                            className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => updateProductStatus(product.id, !product.aktif)}
-                            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                              product.aktif
-                                ? "bg-slate-800 text-white hover:bg-slate-700"
-                                : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
-                            }`}
-                          >
-                            {product.aktif ? "Nonaktifkan" : "Aktifkan"}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
+                return (
+                  <tr key={product.id}>
+                    <td className="font-mono text-slate-500">{product.kode_produk || "-"}</td>
+                    <td>
+                      <p className="font-semibold text-slate-950">{product.nama}</p>
+                      <p className="text-xs text-slate-500">{product.kategori}</p>
+                    </td>
+                    <td className="font-semibold text-slate-950">{product.stok}</td>
+                    <td className="text-slate-600">{formatRupiah(product.harga_beli)}</td>
+                    <td className="text-slate-600">{formatRupiah(product.harga_jual)}</td>
+                    <td>
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${status.className}`}>
+                        {status.label}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => prepareStockMutation(product)}
+                          className="brand-button-success px-3 py-2"
+                        >
+                          Tambah stok
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => editProduct(product)}
+                          className="brand-button-secondary px-3 py-2"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateProductStatus(product.id, !product.aktif)}
+                          className="brand-button-secondary px-3 py-2"
+                        >
+                          {product.aktif ? "Nonaktif" : "Aktifkan"}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
-      </section>
+      </Panel>
     </div>
   );
 }

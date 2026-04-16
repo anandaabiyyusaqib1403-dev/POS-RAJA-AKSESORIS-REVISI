@@ -1,0 +1,1 @@
+# POS Raja Backend\n\nREST API with Express + MySQL.\n\n## Setup\n1. Copy `.env.example` to `.env`, fill DB creds (create `pos_raja_db`, run `mysql pos_raja_db < db/init.sql`).\n2. `npm install`\n3. `npm run dev`\n\n## Endpoints\n- GET /ping\n- /api/products (CRUD)\n- /api/transactions, /api/wallet, /api/logistics, /api/reports\n\nPort: 3001\nCORS: localhost:5173\n

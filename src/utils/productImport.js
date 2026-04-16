@@ -22,10 +22,18 @@ const categoryMatchers = [
 ];
 
 function normalizeText(value) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+
   return String(value ?? "").trim();
 }
 
 function normalizeCode(value) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(Math.trunc(value));
+  }
+
   return normalizeText(value).toUpperCase();
 }
 
@@ -56,7 +64,7 @@ function resolveSheetName(workbook) {
 
   return workbook.SheetNames.find((sheetName) => {
     const worksheet = workbook.Sheets[sheetName];
-    const [firstRow] = XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: false });
+    const [firstRow] = XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: true });
     return hasProductColumns(firstRow);
   });
 }
@@ -69,14 +77,7 @@ export function inferProductCategory(name) {
   return matched?.category || defaultCategory;
 }
 
-export async function parseProductWorkbook(file) {
-  const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, {
-    type: "array",
-    cellDates: true,
-    raw: false,
-  });
-
+export function parseProductWorkbookData(workbook) {
   const sheetName = resolveSheetName(workbook);
   if (!sheetName) {
     throw new Error(
@@ -85,7 +86,7 @@ export async function parseProductWorkbook(file) {
   }
 
   const worksheet = workbook.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: false });
+  const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: true });
   if (!rows.length) {
     throw new Error(`Sheet "${sheetName}" kosong dan belum bisa diimpor.`);
   }
@@ -134,4 +135,15 @@ export async function parseProductWorkbook(file) {
       skippedRows,
     },
   };
+}
+
+export async function parseProductWorkbook(file) {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, {
+    type: "array",
+    cellDates: true,
+    raw: true,
+  });
+
+  return parseProductWorkbookData(workbook);
 }

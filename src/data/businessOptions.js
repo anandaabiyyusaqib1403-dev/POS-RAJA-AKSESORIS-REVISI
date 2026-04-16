@@ -1,15 +1,12 @@
 export const walletPlatforms = [
-  { value: "tunai", label: "Tunai" },
+  { value: "cash", label: "Cash", type: "cash" },
   { value: "dana", label: "DANA" },
-  { value: "gopay", label: "GoPay" },
-  { value: "shopeepay", label: "ShopeePay" },
-  { value: "ovo", label: "OVO" },
-  { value: "linkaja", label: "LinkAja" },
+  { value: "bank_mas", label: "Bank Mas" },
+  { value: "wahana", label: "Wahana" },
+  { value: "pasar_kuota", label: "PASAR KUOTA" },
+  { value: "shopee", label: "Shopee" },
   { value: "bca", label: "BCA" },
-  { value: "mandiri", label: "Mandiri" },
-  { value: "bri", label: "BRI" },
-  { value: "bni", label: "BNI" },
-  { value: "lainnya", label: "Lainnya" },
+  { value: "qris", label: "QRIS", type: "qris" },
 ];
 
 export const walletPlatformLabelMap = walletPlatforms.reduce((acc, item) => {
@@ -17,22 +14,42 @@ export const walletPlatformLabelMap = walletPlatforms.reduce((acc, item) => {
   return acc;
 }, {});
 
-export const walletOverviewPlatforms = [
-  "dana",
-  "gopay",
-  "shopeepay",
-  "ovo",
-  "bca",
-  "mandiri",
-  "bri",
-  "tunai",
-];
+export const walletPlatformIds = walletPlatforms.map((item) => item.value);
+
+export const walletPlatformTypeMap = walletPlatforms.reduce((acc, item) => {
+  acc[item.value] = item.type || "validated";
+  return acc;
+}, {});
+
+export const nonValidatedWalletIds = ["cash", "qris"];
+
+export const validatedWalletIds = walletPlatformIds.filter(
+  (id) => !nonValidatedWalletIds.includes(id)
+);
+
+export const walletOverviewPlatforms = walletPlatformIds;
+
+export const walletAliasMap = {
+  tunai: "cash",
+  cash: "cash",
+  qris: "qris",
+  dana: "dana",
+  "bank mas": "bank_mas",
+  bank_mas: "bank_mas",
+  bankmas: "bank_mas",
+  wahana: "wahana",
+  "pasar kuota": "pasar_kuota",
+  pasar_kuota: "pasar_kuota",
+  pasarkuota: "pasar_kuota",
+  shopee: "shopee",
+  shopeepay: "shopee",
+  bca: "bca",
+};
 
 export const walletTransactionTypes = [
-  { value: "masuk", label: "Saldo Masuk Internal" },
-  { value: "keluar", label: "Saldo Keluar Internal" },
-  { value: "tarik_tunai", label: "Tarik ke Tunai" },
-  { value: "transfer_antar", label: "Transfer Antar Platform" },
+  { value: "masuk", label: "Saldo Masuk" },
+  { value: "keluar", label: "Saldo Keluar" },
+  { value: "transfer_antar", label: "Transfer Antar Wallet" },
 ];
 
 export const walletTransactionTypeLabelMap = walletTransactionTypes.reduce((acc, item) => {
@@ -169,10 +186,12 @@ export const logisticsCouriers = [
   "Wahana",
   "SiCepat",
   "J&T",
-  "Pos Indonesia",
-  "AnterAja",
-  "Ninja",
-  "Lainnya",
+];
+
+export const logisticsPackageTypes = [
+  "Regular",
+  "Express",
+  "Cargo",
 ];
 
 export const cashTypes = [

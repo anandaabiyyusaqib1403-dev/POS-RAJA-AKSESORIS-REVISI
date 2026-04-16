@@ -19,11 +19,39 @@ const DEMO_USERS = {
   },
   "kasir@raja.test": {
     id: "demo-kasir",
-    nama: "Kasir Raja Aksesoris",
+    nama: "Sriyati",
     role: "kasir",
     email: "kasir@raja.test",
   },
 };
+
+function normalizeDemoUser(user) {
+  if (!user) return user;
+
+  if (user.id === "demo-kasir") {
+    return {
+      ...user,
+      nama: DEMO_USERS["kasir@raja.test"].nama,
+    };
+  }
+
+  if (user.id === "demo-owner") {
+    return {
+      ...user,
+      nama: DEMO_USERS["owner@raja.test"].nama,
+    };
+  }
+
+  return user;
+}
+
+function resolveDisplayName(profile) {
+  if (profile?.role === "kasir") {
+    return DEMO_USERS["kasir@raja.test"].nama;
+  }
+
+  return profile?.nama;
+}
 
 async function fetchProfile(userId) {
   const { data, error } = await supabase.from("users").select("*").eq("id", userId).single();
@@ -51,14 +79,18 @@ export function AuthProvider({ children }) {
               setUser({
                 id: session.user.id,
                 email: session.user.email,
-                nama: profile.nama,
+                nama: resolveDisplayName(profile),
                 role: profile.role,
               });
             }
           }
         } else {
           const raw = localStorage.getItem("raja-auth-demo");
-          if (raw && alive) setUser(JSON.parse(raw));
+          if (raw && alive) {
+            const nextUser = normalizeDemoUser(JSON.parse(raw));
+            localStorage.setItem("raja-auth-demo", JSON.stringify(nextUser));
+            setUser(nextUser);
+          }
         }
       } finally {
         if (alive) setLoading(false);
@@ -80,7 +112,7 @@ export function AuthProvider({ children }) {
       const nextUser = {
         id: data.user.id,
         email: data.user.email,
-        nama: profile.nama,
+        nama: resolveDisplayName(profile),
         role: profile.role,
       };
       setUser(nextUser);
@@ -91,9 +123,10 @@ export function AuthProvider({ children }) {
     if (!demoUser || password !== "demo123") {
       throw new Error("Email atau password tidak valid.");
     }
-    localStorage.setItem("raja-auth-demo", JSON.stringify(demoUser));
-    setUser(demoUser);
-    return demoUser;
+    const nextUser = normalizeDemoUser(demoUser);
+    localStorage.setItem("raja-auth-demo", JSON.stringify(nextUser));
+    setUser(nextUser);
+    return nextUser;
   }, []);
 
   const logout = useCallback(async () => {

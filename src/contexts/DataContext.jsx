@@ -18,13 +18,23 @@ import {
   startOfDay,
 } from "../utils/format";
 import { productCategoryGroups } from "../data/productCategories";
-import { walletOverviewPlatforms } from "../data/businessOptions";
+import {
+  nonValidatedWalletIds,
+  walletAliasMap,
+  walletOverviewPlatforms,
+  walletPlatformIds,
+  walletPlatformLabelMap,
+  walletPlatformTypeMap,
+} from "../data/businessOptions";
+import importedProductsSeed from "../data/importedProducts.generated.json";
 
 const DataContext = createContext(null);
 const seedNow = new Date().toISOString();
 const todayDate = formatDateInput(new Date());
+const INSUFFICIENT_WALLET_BALANCE_MESSAGE =
+  "Saldo tidak mencukupi, silakan isi saldo terlebih dahulu";
 
-const seedProducts = [
+const legacySeedProducts = [
   {
     id: "prd-1",
     kode_produk: "RAJA-CS-A15-001",
@@ -79,6 +89,18 @@ const seedProducts = [
   },
 ];
 
+const seedProducts = (importedProductsSeed.length ? importedProductsSeed : legacySeedProducts).map(
+  (product, index) => ({
+    ...sanitizeImportedProduct(product),
+    id: product.id || `seed-prd-${String(index + 1).padStart(4, "0")}`,
+    created_at: product.created_at || seedNow,
+  })
+);
+
+const legacySeedCodes = new Set(
+  legacySeedProducts.map((product) => normalizeProductCode(product.kode_produk))
+);
+
 const seedDigitalTransactions = [
   {
     id: "dig-1",
@@ -130,8 +152,8 @@ const seedWalletTransactions = [
     id: "dom-2",
     kasir_id: "demo-kasir",
     platform: "dana",
-    jenis: "tarik_tunai",
-    platform_tujuan: "tunai",
+    jenis: "transfer_antar",
+    platform_tujuan: "cash",
     nominal: 100000,
     biaya_admin: 2000,
     keterangan: "Tarik saldo internal ke laci tunai",
@@ -144,10 +166,20 @@ const seedLogisticsTransactions = [
     id: "log-1",
     kasir_id: "demo-kasir",
     no_transaksi: `LOG-${formatDateKey(new Date())}-0001`,
+    type: "logistik",
     ekspedisi: "JNE",
+    courier: "JNE",
+    sender: "Raja Aksesoris",
+    receiver: "Budi Santoso",
+    destination: "Jakarta Selatan",
+    packageType: "Regular",
+    weight: 1.2,
+    price: 18000,
+    paymentMethod: "cash",
+    platform_sumber: "cash",
     harga_jual: 18000,
-    modal: 14000,
-    keuntungan: 4000,
+    modal: 0,
+    keuntungan: 18000,
     no_resi: "JNE1234567890",
     catatan: "Paket kecil",
     created_at: seedNow,
@@ -182,8 +214,109 @@ function loadDemoState(key, fallback) {
   return raw ? JSON.parse(raw) : fallback;
 }
 
+function normalizeWalletId(value, fallback = "cash") {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[-\s]+/g, "_");
+  const spaced = String(value || "").trim().toLowerCase();
+  const mapped = walletAliasMap[normalized] || walletAliasMap[spaced] || normalized;
+
+  return walletPlatformIds.includes(mapped) ? mapped : fallback;
+}
+
+function isWalletValidated(walletId) {
+  const id = normalizeWalletId(walletId);
+  return !nonValidatedWalletIds.includes(id);
+}
+
+function createEmptyWalletBalanceMap() {
+  return walletPlatformIds.reduce((acc, walletId) => {
+    acc[walletId] = 0;
+    return acc;
+  }, {});
+}
+
+function getWalletImpactAmount(transaction) {
+  return Number(transaction.nominal || 0) + Number(transaction.biaya_admin || 0);
+}
+
+function buildWalletBalanceMap(transactions = []) {
+  const balances = createEmptyWalletBalanceMap();
+
+  transactions.forEach((rawTransaction) => {
+    const transaction = normalizeWalletTransaction(rawTransaction);
+    const platform = normalizeWalletId(transaction.platform);
+    const targetPlatform = transaction.platform_tujuan
+      ? normalizeWalletId(transaction.platform_tujuan)
+      : null;
+    const nominal = Number(transaction.nominal || 0);
+    const biayaAdmin = Number(transaction.biaya_admin || 0);
+    const outgoing = nominal + biayaAdmin;
+    const incoming = Math.max(nominal - biayaAdmin, 0);
+
+    if (transaction.jenis === "masuk") {
+      balances[platform] += incoming;
+      return;
+    }
+
+    if (transaction.jenis === "keluar") {
+      balances[platform] -= outgoing;
+      return;
+    }
+
+    if (transaction.jenis === "tarik_tunai" || transaction.jenis === "transfer_antar") {
+      balances[platform] -= outgoing;
+      if (targetPlatform) {
+        balances[targetPlatform] += incoming;
+      }
+    }
+  });
+
+  return balances;
+}
+
+function buildWalletCards(transactions = []) {
+  const balances = buildWalletBalanceMap(transactions);
+
+  return walletPlatformIds.map((walletId) => ({
+    id: walletId,
+    name: walletPlatformLabelMap[walletId] || walletId,
+    type: walletPlatformTypeMap[walletId] || "validated",
+    balance: balances[walletId] || 0,
+  }));
+}
+
+function validateWalletBalance(walletId, amount, transactions = []) {
+  const normalizedWalletId = normalizeWalletId(walletId);
+  const safeAmount = Math.max(0, Number(amount || 0));
+
+  if (!isWalletValidated(normalizedWalletId) || safeAmount <= 0) {
+    return;
+  }
+
+  const balance = buildWalletBalanceMap(transactions)[normalizedWalletId] || 0;
+  if (balance === 0 && safeAmount > 0) {
+    throw new Error(
+      "Saldo 0. Isi saldo manual terlebih dahulu agar transaksi dapat divalidasi."
+    );
+  }
+  if (balance < safeAmount) {
+    throw new Error(INSUFFICIENT_WALLET_BALANCE_MESSAGE);
+  }
+}
+
 function normalizeProductCode(value) {
   return String(value || "").trim().toUpperCase();
+}
+
+function createGeneratedProductCode(name) {
+  const compactName = String(name || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 6);
+  const suffix = crypto.randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase();
+  return `RAJA-${compactName || "PRODUK"}-${suffix}`;
 }
 
 function normalizeProduct(product) {
@@ -205,6 +338,29 @@ function sanitizeImportedProduct(product) {
     satuan: String(product.satuan || "pcs").trim() || "pcs",
     aktif: product.aktif ?? true,
   });
+}
+
+function shouldResetLegacyDemoProducts(products) {
+  if (!Array.isArray(products) || products.length === 0) {
+    return true;
+  }
+
+  if (products.length > legacySeedProducts.length) {
+    return false;
+  }
+
+  return products.every((product) => legacySeedCodes.has(normalizeProductCode(product.kode_produk)));
+}
+
+function loadDemoProducts() {
+  const storedProducts = loadDemoState("raja-products-demo", null);
+
+  if (shouldResetLegacyDemoProducts(storedProducts)) {
+    localStorage.setItem("raja-products-demo", JSON.stringify(seedProducts));
+    return seedProducts;
+  }
+
+  return storedProducts.map(normalizeProduct);
 }
 
 function normalizeStockLog(log) {
@@ -235,7 +391,9 @@ function normalizeDigitalTransaction(transaction) {
     provider: transaction.provider || "",
     nomor_tujuan: transaction.nomor_tujuan || "",
     nama_tujuan: transaction.nama_tujuan || "",
-    platform_sumber: transaction.platform_sumber || null,
+    platform_sumber: transaction.platform_sumber
+      ? normalizeWalletId(transaction.platform_sumber)
+      : null,
     catatan: transaction.catatan || "",
   };
 }
@@ -243,9 +401,11 @@ function normalizeDigitalTransaction(transaction) {
 function normalizeWalletTransaction(transaction) {
   return {
     ...transaction,
-    platform: transaction.platform || "lainnya",
+    platform: normalizeWalletId(transaction.platform),
     jenis: transaction.jenis || "masuk",
-    platform_tujuan: transaction.platform_tujuan || null,
+    platform_tujuan: transaction.platform_tujuan
+      ? normalizeWalletId(transaction.platform_tujuan)
+      : null,
     nominal: Number(transaction.nominal || 0),
     biaya_admin: Number(transaction.biaya_admin || 0),
     keterangan: transaction.keterangan || "",
@@ -253,15 +413,42 @@ function normalizeWalletTransaction(transaction) {
 }
 
 function normalizeLogisticsTransaction(transaction) {
+  const courier = transaction.courier || transaction.ekspedisi || "";
+  const sender = transaction.sender || transaction.sender_name || "";
+  const receiver = transaction.receiver || transaction.receiver_name || "";
+  const destination = transaction.destination || "";
+  const packageType = transaction.packageType || transaction.package_type || "Regular";
+  const weight = Number(transaction.weight || 0);
+  const price = Number(transaction.price ?? transaction.harga_jual ?? 0);
+  const paymentMethod = transaction.paymentMethod || transaction.payment_method || transaction.platform_sumber;
+  const normalizedPaymentMethod = paymentMethod ? normalizeWalletId(paymentMethod) : null;
+  const modal = Number(transaction.modal || 0);
+
   return {
     ...transaction,
-    ekspedisi: transaction.ekspedisi || "",
-    harga_jual: Number(transaction.harga_jual || 0),
-    modal: Number(transaction.modal || 0),
+    type: transaction.type || "logistik",
+    courier,
+    ekspedisi: courier,
+    sender,
+    sender_name: sender,
+    receiver,
+    receiver_name: receiver,
+    destination,
+    packageType,
+    package_type: packageType,
+    weight,
+    price,
+    paymentMethod: normalizedPaymentMethod,
+    payment_method: normalizedPaymentMethod,
+    harga_jual: price,
+    modal,
     keuntungan:
       typeof transaction.keuntungan === "number"
         ? transaction.keuntungan
-        : Number(transaction.harga_jual || 0) - Number(transaction.modal || 0),
+        : price - modal,
+    platform_sumber: normalizedPaymentMethod,
+    date: transaction.date || transaction.created_at || seedNow,
+    cashier: transaction.cashier || transaction.kasir_id || null,
     no_resi: transaction.no_resi || "",
     catatan: transaction.catatan || "",
   };
@@ -291,32 +478,6 @@ function getAccessoryTransactionCost(transaction, products) {
   }, 0);
 }
 
-function buildDailySeries(accessoryTransactions, digitalTransactions, days = 7) {
-  const today = startOfDay(new Date());
-  const series = [];
-
-  for (let offset = days - 1; offset >= 0; offset -= 1) {
-    const date = new Date(today);
-    date.setDate(today.getDate() - offset);
-    const key = formatDateKey(date);
-    const aksesoris = accessoryTransactions
-      .filter((trx) => formatDateKey(new Date(trx.created_at)) === key)
-      .reduce((sum, trx) => sum + trx.total_bayar, 0);
-    const digital = digitalTransactions
-      .filter((trx) => formatDateKey(new Date(trx.created_at)) === key)
-      .reduce((sum, trx) => sum + trx.harga_jual, 0);
-
-    series.push({
-      label: formatDateTime(date, { day: "2-digit", month: "short" }),
-      aksesoris,
-      digital,
-      total: aksesoris + digital,
-    });
-  }
-
-  return series;
-}
-
 function createPlatformSummarySeed() {
   return { masuk: 0, keluar: 0, biaya_admin: 0, saldo_bersih: 0 };
 }
@@ -330,64 +491,54 @@ function applyWalletImpact(summary, platform, next) {
 }
 
 function summarizeWalletPlatforms(transactions) {
-  const summary = {};
-  const platformKeys = [...walletOverviewPlatforms];
+  const balances = buildWalletBalanceMap(transactions);
+  const summary = walletOverviewPlatforms.reduce((acc, platform) => {
+    acc[platform] = createPlatformSummarySeed();
+    acc[platform].saldo_bersih = balances[platform] || 0;
+    return acc;
+  }, {});
 
   transactions.forEach((transaction) => {
-    if (!platformKeys.includes(transaction.platform)) {
-      platformKeys.push(transaction.platform);
-    }
-    if (transaction.platform_tujuan && !platformKeys.includes(transaction.platform_tujuan)) {
-      platformKeys.push(transaction.platform_tujuan);
-    }
+    const normalized = normalizeWalletTransaction(transaction);
+    const platform = normalizeWalletId(normalized.platform);
+    const targetPlatform = normalized.platform_tujuan
+      ? normalizeWalletId(normalized.platform_tujuan)
+      : null;
+    const nominal = Number(normalized.nominal || 0);
+    const biayaAdmin = Number(normalized.biaya_admin || 0);
+    const outgoing = nominal + biayaAdmin;
+    const incoming = Math.max(nominal - biayaAdmin, 0);
 
-    if (transaction.jenis === "masuk") {
-      applyWalletImpact(summary, transaction.platform, {
-        masuk: transaction.nominal,
-        biaya_admin: transaction.biaya_admin,
-        saldo_bersih: transaction.nominal - transaction.biaya_admin,
+    if (normalized.jenis === "masuk") {
+      applyWalletImpact(summary, platform, {
+        masuk: incoming,
+        biaya_admin: biayaAdmin,
       });
       return;
     }
 
-    if (transaction.jenis === "keluar") {
-      applyWalletImpact(summary, transaction.platform, {
-        keluar: transaction.nominal,
-        biaya_admin: transaction.biaya_admin,
-        saldo_bersih: -(transaction.nominal + transaction.biaya_admin),
+    if (normalized.jenis === "keluar") {
+      applyWalletImpact(summary, platform, {
+        keluar: outgoing,
+        biaya_admin: biayaAdmin,
       });
       return;
     }
 
-    if (transaction.jenis === "tarik_tunai") {
-      const targetPlatform = transaction.platform_tujuan || "tunai";
-      applyWalletImpact(summary, transaction.platform, {
-        keluar: transaction.nominal,
-        biaya_admin: transaction.biaya_admin,
-        saldo_bersih: -(transaction.nominal + transaction.biaya_admin),
+    if (normalized.jenis === "tarik_tunai" || normalized.jenis === "transfer_antar") {
+      applyWalletImpact(summary, platform, {
+        keluar: outgoing,
+        biaya_admin: biayaAdmin,
       });
-      applyWalletImpact(summary, targetPlatform, {
-        masuk: Math.max(transaction.nominal - transaction.biaya_admin, 0),
-        saldo_bersih: Math.max(transaction.nominal - transaction.biaya_admin, 0),
-      });
-      return;
-    }
-
-    if (transaction.jenis === "transfer_antar") {
-      const targetPlatform = transaction.platform_tujuan || "lainnya";
-      applyWalletImpact(summary, transaction.platform, {
-        keluar: transaction.nominal,
-        biaya_admin: transaction.biaya_admin,
-        saldo_bersih: -(transaction.nominal + transaction.biaya_admin),
-      });
-      applyWalletImpact(summary, targetPlatform, {
-        masuk: Math.max(transaction.nominal - transaction.biaya_admin, 0),
-        saldo_bersih: Math.max(transaction.nominal - transaction.biaya_admin, 0),
-      });
+      if (targetPlatform) {
+        applyWalletImpact(summary, targetPlatform, {
+          masuk: incoming,
+        });
+      }
     }
   });
 
-  return platformKeys.map((platform) => ({
+  return walletOverviewPlatforms.map((platform) => ({
     platform,
     ...(summary[platform] || createPlatformSummarySeed()),
   }));
@@ -397,18 +548,19 @@ function summarizeLogisticsByCourier(transactions) {
   const grouped = {};
 
   transactions.forEach((transaction) => {
-    grouped[transaction.ekspedisi] ??= {
-      ekspedisi: transaction.ekspedisi,
+    const courier = transaction.courier || transaction.ekspedisi || "Lainnya";
+    grouped[courier] ??= {
+      ekspedisi: courier,
       jumlah_transaksi: 0,
       omzet: 0,
       modal: 0,
       keuntungan: 0,
     };
 
-    grouped[transaction.ekspedisi].jumlah_transaksi += 1;
-    grouped[transaction.ekspedisi].omzet += transaction.harga_jual;
-    grouped[transaction.ekspedisi].modal += transaction.modal;
-    grouped[transaction.ekspedisi].keuntungan +=
+    grouped[courier].jumlah_transaksi += 1;
+    grouped[courier].omzet += transaction.harga_jual;
+    grouped[courier].modal += transaction.modal;
+    grouped[courier].keuntungan +=
       transaction.keuntungan ?? transaction.harga_jual - transaction.modal;
   });
 
@@ -715,7 +867,7 @@ export function DataProvider({ children }) {
         setCashEntries(cashRows);
         setStockLogs(stockRows);
       } else {
-        setProducts(loadDemoState("raja-products-demo", seedProducts).map(normalizeProduct));
+        setProducts(loadDemoProducts());
         setAccessoryTransactions(loadDemoState("raja-accessory-transactions-demo", []));
         setDigitalTransactions(
           loadDemoState("raja-digital-transactions-demo", seedDigitalTransactions).map(
@@ -773,6 +925,11 @@ export function DataProvider({ children }) {
     []
   );
 
+  const walletBalances = useMemo(
+    () => buildWalletCards(walletTransactions),
+    [walletTransactions]
+  );
+
   const createAccessoryTransaction = useCallback(
     async ({ items, metodeBayar, uangDiterima, catatan }) => {
       const todayCount = accessoryTransactions.filter(
@@ -780,15 +937,18 @@ export function DataProvider({ children }) {
       ).length;
       const transactionId = crypto.randomUUID();
       const totalBayar = items.reduce((sum, item) => sum + item.subtotal, 0);
-      const finalUangDiterima = metodeBayar === "tunai" ? uangDiterima : totalBayar;
+      const normalizedPaymentMethod = normalizeWalletId(metodeBayar);
+      // Note: Accessory transactions do not validate wallet balance
+
+      const finalUangDiterima = normalizedPaymentMethod === "cash" ? uangDiterima : totalBayar;
       const transaction = {
         id: transactionId,
         kasir_id: user?.id || null,
         no_transaksi: generateTransactionNumber("TRX", todayCount + 1),
         total_bayar: totalBayar,
         uang_diterima: finalUangDiterima,
-        kembalian: metodeBayar === "tunai" ? finalUangDiterima - totalBayar : 0,
-        metode_bayar: metodeBayar,
+        kembalian: normalizedPaymentMethod === "cash" ? finalUangDiterima - totalBayar : 0,
+        metode_bayar: normalizedPaymentMethod,
         catatan: catatan || "",
         created_at: new Date().toISOString(),
         items: items.map((item) => ({
@@ -915,6 +1075,18 @@ export function DataProvider({ children }) {
         ...payload,
         created_at: new Date().toISOString(),
       });
+      const walletAmount = Number(transaction.modal || 0);
+      const sourceWallet = transaction.platform_sumber
+        ? normalizeWalletId(transaction.platform_sumber)
+        : null;
+
+      if (walletAmount > 0 && !sourceWallet) {
+        throw new Error("Pilih sumber saldo toko.");
+      }
+
+      if (sourceWallet) {
+        validateWalletBalance(sourceWallet, walletAmount, walletTransactions);
+      }
 
       if (supabaseEnabled) {
         const { error } = await supabase.from("transaksi_digital").insert(transaction);
@@ -971,6 +1143,33 @@ export function DataProvider({ children }) {
         ...payload,
         created_at: new Date().toISOString(),
       });
+      const nominal = Number(transaction.nominal || 0);
+      const biayaAdmin = Number(transaction.biaya_admin || 0);
+
+      if (!Number.isFinite(nominal) || nominal <= 0) {
+        throw new Error("Nominal mutasi harus lebih besar dari 0.");
+      }
+
+      if (biayaAdmin < 0) {
+        throw new Error("Biaya admin tidak boleh negatif.");
+      }
+
+      if (transaction.jenis === "masuk" && biayaAdmin > nominal) {
+        throw new Error("Biaya admin tidak boleh lebih besar dari nominal masuk.");
+      }
+
+      if (transaction.jenis === "transfer_antar") {
+        if (!transaction.platform_tujuan) {
+          throw new Error("Pilih tujuan transfer wallet.");
+        }
+        if (transaction.platform === transaction.platform_tujuan) {
+          throw new Error("Wallet asal dan tujuan tidak boleh sama.");
+        }
+      }
+
+      if (transaction.jenis === "keluar" || transaction.jenis === "transfer_antar") {
+        validateWalletBalance(transaction.platform, getWalletImpactAmount(transaction), walletTransactions);
+      }
 
       if (supabaseEnabled) {
         const { error } = await supabase.from("transaksi_dompet").insert(transaction);
@@ -1021,12 +1220,67 @@ export function DataProvider({ children }) {
         ...payload,
         created_at: new Date().toISOString(),
       });
+      const walletAmount = Number(transaction.price || transaction.harga_jual || 0);
+      const sourceWallet = transaction.paymentMethod || transaction.payment_method;
+
+      if (!transaction.receiver.trim()) {
+        throw new Error("Nama penerima wajib diisi.");
+      }
+
+      if (!transaction.destination.trim()) {
+        throw new Error("Tujuan wajib diisi.");
+      }
+
+      if (transaction.weight <= 0) {
+        throw new Error("Berat paket harus lebih besar dari 0.");
+      }
+
+      if (walletAmount <= 0) {
+        throw new Error("Ongkir harus lebih besar dari 0.");
+      }
+
+      if (walletAmount > 0 && !sourceWallet) {
+        throw new Error("Pilih metode pembayaran.");
+      }
+
+      if (sourceWallet) {
+        validateWalletBalance(sourceWallet, walletAmount, walletTransactions);
+      }
 
       if (supabaseEnabled) {
-        const { keuntungan, ...insertPayload } = transaction;
+        const insertPayload = {
+          id: transaction.id,
+          kasir_id: transaction.kasir_id,
+          no_transaksi: transaction.no_transaksi,
+          ekspedisi: transaction.ekspedisi,
+          harga_jual: transaction.harga_jual,
+          modal: transaction.modal,
+          no_resi: transaction.no_resi,
+          catatan: transaction.catatan,
+          created_at: transaction.created_at,
+          type: transaction.type,
+          sender_name: transaction.sender,
+          receiver_name: transaction.receiver,
+          destination: transaction.destination,
+          package_type: transaction.packageType,
+          weight: transaction.weight,
+          price: transaction.price,
+          payment_method: transaction.paymentMethod,
+        };
         const { error } = await supabase.from("transaksi_logistik").insert(insertPayload);
         if (error?.code === "42P01") {
           throw new Error("Migration POS v2 untuk tabel transaksi_logistik belum dijalankan.");
+        }
+        if (
+          error?.code === "PGRST204" ||
+          error?.code === "42703" ||
+          error?.message?.includes("type") ||
+          error?.message?.includes("receiver_name") ||
+          error?.message?.includes("payment_method")
+        ) {
+          throw new Error(
+            "Migration logistik terbaru belum dijalankan di Supabase. Jalankan migration fitur logistik."
+          );
         }
         if (error) throw error;
         await loadData();
@@ -1181,18 +1435,22 @@ export function DataProvider({ children }) {
 
   const saveProduct = useCallback(
     async (payload) => {
+      const existingProduct = payload.id
+        ? products.find((item) => item.id === payload.id)
+        : null;
+      const productCode =
+        normalizeProductCode(payload.kode_produk) ||
+        existingProduct?.kode_produk ||
+        createGeneratedProductCode(payload.nama);
+
       const product = {
         ...payload,
-        kode_produk: normalizeProductCode(payload.kode_produk),
+        kode_produk: productCode,
         harga_beli: Number(payload.harga_beli),
         harga_jual: Number(payload.harga_jual),
         stok: Number(payload.stok),
         stok_minimum: Number(payload.stok_minimum),
       };
-
-      if (!product.kode_produk) {
-        throw new Error("Kode produk wajib diisi.");
-      }
 
       const duplicateCode = products.find(
         (item) =>
@@ -1635,6 +1893,7 @@ export function DataProvider({ children }) {
       accessoryTransactions,
       digitalTransactions,
       walletTransactions,
+      walletBalances,
       logisticsTransactions,
       cashEntries,
       stockLogs,
@@ -1680,6 +1939,7 @@ export function DataProvider({ children }) {
       updateCashEntry,
       updateProductStatus,
       walletTransactions,
+      walletBalances,
     ]
   );
 

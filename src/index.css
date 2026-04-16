@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -6,27 +6,33 @@
 
 :root {
   color-scheme: light;
-  --brand-900: #142c47;
-  --brand-800: #1d4266;
-  --brand-700: #2b5a84;
-  --brand-100: #e7f1ff;
-  --panel-border: rgba(148, 163, 184, 0.2);
-  --panel-shadow: 0 22px 50px rgba(15, 23, 42, 0.08);
-  --panel-shadow-strong: 0 28px 70px rgba(15, 23, 42, 0.14);
+  --brand-bg: #F8FAFC;
+  --brand-surface: #FFFFFF;
+  --brand-surface-soft: #F8FAFC;
+  --brand-surface-strong: #FFFFFF;
+  --brand-border: #E2E8F0;
+  --brand-border-strong: #E2E8F0;
+  --brand-gold: #d4af37;
+  --brand-gold-soft: rgba(212, 175, 55, 0.1);
+  --brand-text: #0F172A;
+  --brand-text-muted: #64748B;
+  --brand-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --brand-shadow-soft: 0 2px 8px rgba(15, 23, 42, 0.06);
 }
 
 @layer base {
+  * {
+    @apply border-slate-200;
+  }
+
   html {
     @apply scroll-smooth;
   }
 
   body {
-    @apply font-sans text-slate-900 antialiased;
-    min-height: 100vh;
-    background:
-      radial-gradient(circle at top left, rgba(125, 211, 252, 0.24), transparent 34%),
-      radial-gradient(circle at top right, rgba(59, 130, 246, 0.16), transparent 26%),
-      linear-gradient(180deg, #f8fbff 0%, #eff5ff 46%, #f8fafc 100%);
+    @apply min-h-screen font-sans text-slate-900 antialiased;
+    background: #F8FAFC;
+    color: #0F172A;
   }
 
   #root {
@@ -34,99 +40,206 @@
   }
 
   ::selection {
-    background: rgba(37, 99, 235, 0.16);
-    color: #0f172a;
+    background: rgba(212, 175, 55, 0.15);
+    color: #0F172A;
   }
 }
 
 @layer components {
-  .app-panel {
-    @apply border backdrop-blur-xl;
-    border-radius: 30px;
-    border-color: var(--panel-border);
-    background: rgba(255, 255, 255, 0.88);
-    box-shadow: var(--panel-shadow);
+  .brand-shell {
+    @apply min-h-screen;
+    background: var(--brand-bg);
   }
 
-  .app-panel-dark {
-    @apply border text-white backdrop-blur-xl;
-    border-radius: 32px;
-    border-color: rgba(191, 219, 254, 0.14);
-    background:
-      radial-gradient(circle at top right, rgba(56, 189, 248, 0.18), transparent 28%),
-      linear-gradient(140deg, #142c47 0%, #1f4d73 58%, #2f7aa4 100%);
-    box-shadow: var(--panel-shadow-strong);
+  .brand-sidebar {
+    background: #FFFFFF;
+    border-right: 1px solid var(--brand-border);
+    box-shadow: 2px 0 8px rgba(15, 23, 42, 0.05);
   }
 
-  .app-input,
-  .app-textarea {
-    @apply w-full rounded-[22px] border px-4 text-sm text-slate-900 outline-none transition duration-200;
-    border-color: rgba(148, 163, 184, 0.28);
-    background: rgba(255, 255, 255, 0.96);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  .brand-panel {
+    @apply rounded-2xl border;
+    background: #FFFFFF;
+    border-color: var(--brand-border);
+    box-shadow: var(--brand-shadow);
   }
 
-  .app-input {
+  .brand-panel-muted {
+    background: var(--brand-surface-soft);
+    border-color: var(--brand-border);
+  }
+
+  .brand-panel-strong {
+    background: #FFFFFF;
+    border-color: var(--brand-border);
+    box-shadow: var(--brand-shadow);
+  }
+
+  .brand-glow {
+    box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.12), 0 0 24px rgba(212, 175, 55, 0.08);
+  }
+
+  .brand-input,
+  .brand-select,
+  .brand-textarea {
+    @apply w-full rounded-2xl border px-4 text-sm text-[var(--brand-text)] outline-none transition duration-200;
+    background: #FFFFFF;
+    border-color: var(--brand-border);
+  }
+
+  .brand-input,
+  .brand-select {
+    @apply h-12;
+  }
+
+  .brand-textarea {
     @apply py-3;
-  }
-
-  .app-textarea {
-    @apply py-3;
+    min-height: 112px;
     resize: vertical;
-    min-height: 96px;
   }
 
-  .app-input:focus,
-  .app-textarea:focus {
-    border-color: rgba(37, 99, 235, 0.45);
-    box-shadow:
-      0 0 0 4px rgba(96, 165, 250, 0.18),
-      inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  .brand-input::placeholder,
+  .brand-textarea::placeholder {
+    color: #94A3B8;
   }
 
-  .app-scrollbar {
+  .brand-input:focus,
+  .brand-select:focus,
+  .brand-textarea:focus {
+    border-color: #D4AF37;
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1);
+  }
+
+  .brand-button-primary {
+    @apply inline-flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition;
+    background: #D4AF37;
+    color: #0F172A;
+    box-shadow: 0 4px 12px rgba(212, 175, 55, 0.15);
+  }
+
+  .brand-button-primary:hover {
+    background: #C9A227;
+    box-shadow: 0 6px 16px rgba(212, 175, 55, 0.2);
+  }
+
+  .brand-button-secondary {
+    @apply inline-flex items-center justify-center rounded-2xl border px-4 py-3 text-sm font-semibold transition;
+    border-color: var(--brand-border);
+    background: #FFFFFF;
+    color: #475569;
+  }
+
+  .brand-button-secondary:hover {
+    border-color: #D4AF37;
+    background: #F8FAFC;
+    color: #0F172A;
+  }
+
+  .brand-button-success {
+    @apply inline-flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold text-white transition;
+    background: #22C55E;
+    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.15);
+  }
+
+  .brand-button-success:hover {
+    background: #16A34A;
+    box-shadow: 0 6px 16px rgba(34, 197, 94, 0.2);
+  }
+
+  .brand-chip {
+    @apply inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em];
+    background: rgba(212, 175, 55, 0.1);
+    color: #D4AF37;
+  }
+
+  .brand-table {
+    @apply min-w-full text-left text-sm;
+  }
+
+  .brand-table thead {
+    @apply text-xs uppercase tracking-[0.22em];
+    color: #64748B;
+  }
+
+  .brand-table tbody tr {
+    border-top: 1px solid var(--brand-border);
+  }
+
+  .brand-table tbody tr:hover {
+    background: rgba(212, 175, 55, 0.04);
+  }
+
+  .brand-table th,
+  .brand-table td {
+    @apply px-4 py-3;
+  }
+
+  .brand-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: rgba(148, 163, 184, 0.7) transparent;
+    scrollbar-color: rgba(212, 175, 55, 0.4) transparent;
   }
 
-  .app-scrollbar::-webkit-scrollbar {
+  .brand-scrollbar::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
 
-  .app-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(148, 163, 184, 0.72);
+  .brand-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(212, 175, 55, 0.4);
     border-radius: 9999px;
   }
 
-  .app-scrollbar::-webkit-scrollbar-track {
+  .brand-scrollbar::-webkit-scrollbar-track {
     background: transparent;
   }
 }
 
 @media print {
-  body * {
-    visibility: hidden;
-  }
-
-  #printable-receipt,
-  #printable-receipt * {
-    visibility: visible;
-  }
-
-  #printable-receipt {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 280px;
-    max-width: 280px;
-    margin: 0;
-    padding: 0;
-    font-family: "Courier New", monospace;
-  }
-
   @page {
-    size: 58mm auto;
-    margin: 4mm;
+    margin: 0;
+  }
+
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #FFFFFF !important;
+  }
+
+  body {
+    min-height: auto !important;
+  }
+
+  #root {
+    min-height: auto !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  #print-area,
+  #print-area * {
+    visibility: visible !important;
+  }
+
+  #print-area {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 320px !important;
+    padding: 12px !important;
+    margin: 0 !important;
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    font-family: "Courier New", monospace !important;
+  }
+
+  .receipt-print {
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: auto !important;
+    background: #FFFFFF !important;
   }
 }

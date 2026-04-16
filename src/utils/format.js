@@ -50,6 +50,14 @@ export function parseDateInput(value) {
   return new Date(year, month - 1, day);
 }
 
+export function formatDisplayDate(date) {
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(date));
+}
+
 export function formatDateKey(value) {
   const date = new Date(value);
   const year = date.getFullYear();
