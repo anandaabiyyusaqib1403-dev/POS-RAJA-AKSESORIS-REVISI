@@ -1,7 +1,13 @@
 export const dashboardRoute = "/dashboard";
 export const cashierRoute = "/kasir";
 
+export const shiftRoute = "/shift";
+
 export const routeMeta = {
+  "/shift": {
+    title: "Shift Management", 
+    description: "Opening & closing shift dengan kontrol waktu dan approval owner.",
+  },
   "/dashboard": {
     title: "Dashboard",
     description: "Ringkasan performa toko, profit, dan operasional harian.",
@@ -38,6 +44,7 @@ export const routeMeta = {
     title: "Riwayat Transaksi",
     description: "Cari transaksi dengan cepat dan lihat detail pemasukan, pengeluaran, serta laba.",
   },
+
   "/laporan-keuangan": {
     title: "Laporan Keuangan",
     description: "Omzet, modal, profit, pengeluaran, dan rekap kas toko.",
@@ -62,6 +69,7 @@ export const navigationSections = {
       title: "Utama",
       items: [
         { to: "/dashboard", label: "Dashboard", icon: "dashboard" },
+        { to: "/shift", label: "Shift", icon: "history" },
         { to: "/keuangan", label: "Transaksi Keuangan", icon: "wallet" },
         { to: "/kasir", label: "Kasir (POS)", icon: "pos" },
         { to: "/pelanggan", label: "Data Pelanggan", icon: "users" },
@@ -81,6 +89,7 @@ export const navigationSections = {
       title: "Riwayat & Laporan",
       items: [
         { to: "/riwayat-transaksi", label: "Riwayat Transaksi", icon: "history" },
+        { to: "/retur", label: "Retur", icon: "arrow-left-to-line" },
         { to: "/laporan-keuangan", label: "Laporan Keuangan", icon: "chart" },
         { to: "/laporan-penjualan", label: "Laporan Penjualan", icon: "trend" },
       ],
@@ -93,23 +102,9 @@ export const navigationSections = {
       ],
     },
   ],
-  kasir: [
-    {
-      title: "Kasir",
-      items: [
-        { to: "/kasir", label: "Kasir (POS)", icon: "pos" },
-        { to: "/riwayat-transaksi", label: "Riwayat Transaksi", icon: "history" },
-      ],
-    },
-    {
-      title: "Tools",
-      items: [
-        { to: "/kalkulator", label: "Kalkulator", icon: "calculator" },
-        { to: "/bantuan", label: "Bantuan", icon: "help" },
-      ],
-    },
-  ],
 };
+
+navigationSections.kasir = navigationSections.pemilik;
 
 export function getDefaultRoute(role) {
   return role === "pemilik" ? dashboardRoute : cashierRoute;

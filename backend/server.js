@@ -1,1 +1,87 @@
-import express from 'express';\nimport cors from 'cors';\nimport helmet from 'helmet';\nimport morgan from 'morgan';\nimport dotenv from 'dotenv';\nimport mysql from 'mysql2/promise';\n\nimport productRoutes from './routes/products.js';\nimport transactionRoutes from './routes/transactions.js';\nimport walletRoutes from './routes/wallet.js';\nimport logisticsRoutes from './routes/logistics.js';\nimport reportRoutes from './routes/reports.js';\n\ndotenv.config();\n\nconst app = express();\nconst PORT = process.env.PORT || 3001;\n\n// Middleware\napp.use(helmet());\napp.use(cors({ origin: 'http://localhost:5173' }));\napp.use(morgan('dev'));\napp.use(express.json({ limit: '10mb' }));\napp.use(express.urlencoded({ extended: true }));\n\n// Health check\napp.get('/ping', (req, res) => res.json({ status: 'OK', timestamp: new Date().toISOString() }));\n\n// API routes\napp.use('/api/products', productRoutes);\napp.use('/api/transactions', transactionRoutes);\napp.use('/api/wallet', walletRoutes);\napp.use('/api/logistics', logisticsRoutes);\napp.use('/api/reports', reportRoutes);\n\n// 404 handler\napp.use('*', (req, res) => {\n  res.status(404).json({ error: 'Route not found' });\n});\n\n// Global error handler\napp.use((err, req, res, next) => {\n  console.error(err.stack);\n  res.status(500).json({ error: 'Internal server error' });\n});\n\nconst createPool = async () => {\n  return mysql.createPool({\n    host: process.env.DB_HOST,\n    user: process.env.DB_USER,\n    password: process.env.DB_PASS,\n    database: process.env.DB_NAME,\n    waitForConnections: true,\n    connectionLimit: 10,\n    queueLimit: 0,\n  });\n};\n\n// Test DB connection on start\nlet pool;\nasync function startServer() {\n  try {\n    pool = await createPool();\n    const connection = await pool.getConnection();\n    await connection.ping();\n    connection.release();\n    console.log('✅ MySQL connected');\n  } catch (err) {\n    console.error('❌ MySQL connection failed:', err.message);\n    process.exit(1);\n  }\n\n  // Attach pool to app for routes\n  app.set('dbPool', pool);\n\n  app.listen(PORT, () => {\n    console.log(`🚀 Server running on http://localhost:${PORT}`);\n  });\n}\n\nstartServer();\n\nexport { pool };\n
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import dotenv from 'dotenv';
+import mysql from 'mysql2/promise';
+
+import productRoutes from './routes/products.js';
+import transactionRoutes from './routes/transactions.js';
+import walletRoutes from './routes/wallet.js';
+import logisticsRoutes from './routes/logistics.js';
+import reportRoutes from './routes/reports.js';
+import suppliersRoutes from './routes/suppliers.js';
+import returnsRoutes from './routes/returns.js';
+
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+// Middleware
+app.use(helmet());
+app.use(cors({ origin: 'http://localhost:5173' }));
+app.use(morgan('dev'));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// Health check
+app.get('/ping', (req, res) => res.json({ status: 'OK', timestamp: new Date().toISOString() }));
+
+// API routes
+app.use('/api/products', productRoutes);
+app.use('/api/transactions', transactionRoutes);
+app.use('/api/wallet', walletRoutes);
+app.use('/api/logistics', logisticsRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/suppliers', suppliersRoutes);
+app.use('/api/returns', returnsRoutes);
+
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({ error: 'Route not found' });
+});
+
+// Global error handler
+app.use((err, req, res, _next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+const createPool = async () => {
+  return mysql.createPool({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASS,
+    database: process.env.DB_NAME,
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+  });
+};
+
+// Test DB connection on start
+let pool;
+async function startServer() {
+  try {
+    pool = await createPool();
+    const connection = await pool.getConnection();
+    await connection.ping();
+    connection.release();
+    console.log('✅ MySQL connected');
+  } catch (err) {
+    console.error('❌ MySQL connection failed:', err.message);
+    process.exit(1);
+  }
+
+  // Attach pool to app for routes
+  app.set('dbPool', pool);
+
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
+  });
+}
+
+startServer();
+
+export { pool };
