@@ -1,0 +1,8 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Cash">
+  <rect width="128" height="128" rx="28" fill="#16A34A"/>
+  <rect x="22" y="34" width="84" height="60" rx="12" fill="#DCFCE7"/>
+  <rect x="30" y="42" width="68" height="44" rx="8" fill="#22C55E"/>
+  <circle cx="64" cy="64" r="18" fill="#DCFCE7"/>
+  <path d="M58 72.5h12.5c3 0 5.5-2.1 5.5-5.1 0-3.2-2.5-4.8-7.4-5.8l-6.3-1.3c-4.8-1-7.3-2.8-7.3-6 0-3 2.5-5.2 5.8-5.2H72" fill="none" stroke="#15803D" stroke-width="6" stroke-linecap="round"/>
+  <path d="M64 46v36" stroke="#15803D" stroke-width="5" stroke-linecap="round"/>
+</svg>

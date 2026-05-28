@@ -1,8 +1,8 @@
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import { formatCashierName } from "./cashier";
 
-export function exportExcel(data, fileName = "laporan-raja-aksesoris.xlsx") {
+export async function exportExcel(data, fileName = "laporan-raja-aksesoris.xlsx") {
   const formatted = Array.isArray(data)
     ? data.map((item) => ({
         "No Transaksi": item.id,
@@ -16,23 +16,18 @@ export function exportExcel(data, fileName = "laporan-raja-aksesoris.xlsx") {
       }))
     : [];
 
-  const worksheet = XLSX.utils.json_to_sheet(formatted);
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet("Laporan");
+  const headers = formatted.length ? Object.keys(formatted[0]) : ["Data"];
 
-  if (formatted.length) {
-    const colWidths = Object.keys(formatted[0]).map((key) => ({
-      wch:
-        Math.max(key.length, ...formatted.map((row) => String(row[key] || "").length)) + 5,
-    }));
-    worksheet["!cols"] = colWidths;
-  }
+  worksheet.addRow(headers);
+  formatted.forEach((row) => worksheet.addRow(headers.map((key) => row[key])));
+  worksheet.columns = headers.map((key) => ({
+    width: Math.max(key.length, ...formatted.map((row) => String(row[key] || "").length)) + 5,
+  }));
+  worksheet.getRow(1).font = { bold: true };
 
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan");
-
-  const buffer = XLSX.write(workbook, {
-    bookType: "xlsx",
-    type: "array",
-  });
+  const buffer = await workbook.xlsx.writeBuffer();
 
   saveAs(
     new Blob([buffer], {

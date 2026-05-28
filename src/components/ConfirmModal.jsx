@@ -2,6 +2,11 @@ export default function ConfirmModal({
   isOpen,
   title = "Konfirmasi",
   message,
+  target,
+  consequence,
+  requiresPin = false,
+  destructive = false,
+  size = "sm",
   confirmLabel = "Konfirmasi",
   cancelLabel = "Batal",
   isLoading = false,
@@ -13,16 +18,45 @@ export default function ConfirmModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6">
-      <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+      <div
+        className={`brand-panel brand-modal-${size} ${
+          destructive ? "brand-modal-destructive" : ""
+        } p-6 shadow-2xl`.trim()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirmation-modal-title"
+      >
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--brand-gold)]">
-            Konfirmasi retur
+            Konfirmasi aksi
           </p>
-          <h2 className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-950">
+          <h2 id="confirmation-modal-title" className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-950">
             {title}
           </h2>
           {message ? <p className="mt-3 text-sm leading-6 text-slate-600">{message}</p> : null}
         </div>
+
+        {target ? (
+          <div className="mt-5 rounded-lg border border-[var(--border-muted)] bg-[var(--surface-secondary)] px-4 py-3">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+              Target
+            </p>
+            <p className="mt-1 break-words text-sm font-bold text-[var(--text)]">{target}</p>
+          </div>
+        ) : null}
+
+        {consequence ? (
+          <div className="brand-modal-consequence mt-3">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em]">Konsekuensi</p>
+            <p className="mt-1">{consequence}</p>
+          </div>
+        ) : null}
+
+        {requiresPin ? (
+          <p className="mt-3 text-sm font-semibold text-[var(--warning)]">
+            Verifikasi PIN diwajibkan untuk melanjutkan aksi sensitif ini.
+          </p>
+        ) : null}
 
         {children ? <div className="mt-5">{children}</div> : null}
 
@@ -39,7 +73,9 @@ export default function ConfirmModal({
             type="button"
             onClick={onConfirm}
             disabled={isLoading}
-            className="brand-button-primary disabled:cursor-not-allowed disabled:opacity-60"
+            className={`${
+              destructive ? "brand-button-danger" : "brand-button-primary"
+            } disabled:cursor-not-allowed disabled:opacity-60`}
           >
             {isLoading ? "Memproses..." : confirmLabel}
           </button>

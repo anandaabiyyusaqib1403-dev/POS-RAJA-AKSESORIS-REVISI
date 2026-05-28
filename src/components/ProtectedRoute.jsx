@@ -1,21 +1,11 @@
 import { Navigate, useLocation } from "react-router-dom";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "../contexts/useAuth";
 
 export default function ProtectedRoute({ allowedRoles, children }) {
-  const { user, loading } = useAuth();
+  const { user, authState } = useAuth();
   const location = useLocation();
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--brand-bg)]">
-        <div className="brand-panel px-6 py-4 text-sm font-semibold text-slate-700">
-          Memuat sesi...
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) {
+  if (!user || authState === "signed_out" || authState === "profile_error") {
     return <Navigate to="/" replace state={{ from: location }} />;
   }
 
@@ -25,3 +15,4 @@ export default function ProtectedRoute({ allowedRoles, children }) {
 
   return children;
 }
+

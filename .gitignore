@@ -1,1 +1,12 @@
 node_modules
+dist
+.vercel
+.env
+.env.local
+.env.*.local
+*.log
+*.err.log
+*.pid
+playwright*.png
+test-results/
+supabase/.temp/

@@ -1,0 +1,2 @@
+export const DATA_LOAD_TIMEOUT_MS = 15000;
+export const LARGE_REFRESH_THROTTLE_MS = 15000;

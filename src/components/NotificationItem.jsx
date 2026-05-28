@@ -11,28 +11,28 @@ const EXIT_DURATION = 300;
 
 const typeConfigMap = {
   success: {
-    title: "Berhasil",
+    title: "Selesai",
     accentClass: "border-emerald-500",
     iconWrapperClass: "border-emerald-100 bg-emerald-50",
     iconClass: "text-emerald-600",
     Icon: CheckCircle2,
   },
   error: {
-    title: "Terjadi Kesalahan",
+    title: "Belum Berhasil",
     accentClass: "border-red-500",
     iconWrapperClass: "border-red-100 bg-red-50",
     iconClass: "text-red-600",
     Icon: XCircle,
   },
   warning: {
-    title: "Perlu Perhatian",
+    title: "Perlu Dicek",
     accentClass: "border-[#D4AF37]",
     iconWrapperClass: "border-[#F1E0A6] bg-[#FFF8E1]",
     iconClass: "text-[#B8921F]",
     Icon: AlertTriangle,
   },
   info: {
-    title: "Informasi",
+    title: "Info",
     accentClass: "border-slate-400",
     iconWrapperClass: "border-slate-200 bg-slate-100",
     iconClass: "text-slate-500",
@@ -97,13 +97,13 @@ export default function NotificationItem({ notification, onRemove }) {
   return (
     <div
       role="alert"
-      className={`pointer-events-auto w-full overflow-hidden rounded-xl border border-slate-200/80 border-l-4 bg-[linear-gradient(135deg,#FFFFFF_0%,#FFF9EC_100%)] shadow-md transition-all duration-300 ease-out ${config.accentClass} ${
+      className={`pointer-events-auto w-full overflow-hidden rounded-lg border border-slate-200/80 border-l-4 bg-[linear-gradient(135deg,#FFFFFF_0%,#FFF9EC_100%)] shadow-md transition-all duration-300 ease-out ${config.accentClass} ${
         isVisible ? "translate-y-0 opacity-100" : "-translate-y-3 opacity-0"
       }`}
     >
       <div className="flex items-start gap-3 p-4">
         <div
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${config.iconWrapperClass}`}
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border ${config.iconWrapperClass}`}
         >
           <Icon className={`h-5 w-5 ${config.iconClass}`} strokeWidth={2.2} />
         </div>

@@ -1,8 +1,25 @@
 create extension if not exists pgcrypto;
 
-create type user_role as enum ('pemilik', 'kasir');
-create type metode_bayar as enum ('tunai', 'qris', 'transfer');
-create type jenis_digital as enum ('pulsa', 'kuota', 'voucher_game', 'token_listrik', 'lainnya');
+do $$
+begin
+  create type public.user_role as enum ('pemilik', 'kasir');
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  create type public.metode_bayar as enum ('tunai', 'qris', 'transfer');
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  create type public.jenis_digital as enum ('pulsa', 'kuota', 'voucher_game', 'token_listrik', 'lainnya');
+exception
+  when duplicate_object then null;
+end $$;
 
 create table if not exists public.users (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -69,12 +86,16 @@ create table if not exists public.stok_masuk (
 );
 
 create or replace function public.current_user_role()
-returns user_role
+returns public.user_role
 language sql
 stable
+security definer
+set search_path = public
 as $$
   select role from public.users where id = auth.uid();
 $$;
+
+grant execute on function public.current_user_role() to authenticated;
 
 alter table public.users enable row level security;
 alter table public.produk enable row level security;

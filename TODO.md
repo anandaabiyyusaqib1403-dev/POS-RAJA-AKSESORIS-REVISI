@@ -1,15 +1,13 @@
-# POS Raja Aksesoris - Print Receipt Improvement
+# POS RAJA AKSESORIS - IMPLEMENTASI PRIORITAS FEATURES
 
-## Plan Status: ✅ Approved by User (Popup Print Approach)
+**Status: Approved Plan - Ready for Implementation**
 
-### Steps to Complete:
+## 🎯 FEATURES TO IMPLEMENT (Urutan Prioritas)
 
-- [ ] **Step 1**: Add import for print utils in `src/pages/HistoryPage.jsx`
-- [ ] **Step 2**: Replace "Cetak struk" button `onClick` with popup print logic using `generateReceiptHTML(selectedRow.details)`
-- [ ] **Step 3**: Test popup print renders clean receipt (header, items, payment summary)
-- [ ] **Step 4**: Verify thermal printer/PDF compatibility (narrow width, B&W)
-- [ ] **Step 5**: Complete task with `attempt_completion`
+### **PHASE 1: Database Schema (CRITICAL - BLOCKER)**
+- [x] 1.1 Create `supabase/migrations/20241001_refund_discount_profit.sql` with enums, tables, triggers, view (see plan)
+- [ ] 1.2 Run `supabase db push` or execute SQL
+- [ ] 1.3 Test schema: INSERT sample refund/promo → verify triggers restore stock
 
-**Current Progress**: Starting Step 1
-
-**Goal**: Clean, isolated popup receipt print from HistoryPage, no dashboard clutter.
+### **PHASE 2: Core Logic (DataContext.jsx)**
+- [ ]

@@ -1,11 +1,17 @@
 export const DEFAULT_CASHIER_NAME = "Sriyati";
+export const DEFAULT_OWNER_NAME = "Amri Syowfial";
 
 const knownCashierAliases = new Set([
-  "demo-kasir",
-  "demo kasir",
   "kasir",
   "kasir raja aksesoris",
   "sriyati",
+]);
+
+const knownOwnerAliases = new Set([
+  "owner",
+  "pemilik",
+  "pemilik raja aksesoris",
+  "amri syowfial",
 ]);
 
 export function formatCashierName(value, fallback = DEFAULT_CASHIER_NAME) {
@@ -15,6 +21,10 @@ export function formatCashierName(value, fallback = DEFAULT_CASHIER_NAME) {
 
   const cleaned = normalized.replace(/[-_]+/g, " ").trim();
   const lower = cleaned.toLowerCase();
+
+  if (knownOwnerAliases.has(normalized.toLowerCase()) || knownOwnerAliases.has(lower)) {
+    return DEFAULT_OWNER_NAME;
+  }
 
   if (knownCashierAliases.has(normalized.toLowerCase()) || knownCashierAliases.has(lower)) {
     return DEFAULT_CASHIER_NAME;

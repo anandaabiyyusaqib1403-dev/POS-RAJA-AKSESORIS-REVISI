@@ -4,8 +4,14 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
-  darkMode: 'class',
   theme: {
+    screens: {
+      sm: '640px',
+      md: '768px',
+      lg: '1280px',
+      xl: '1536px',
+      '2xl': '1800px',
+    },
     extend: {
       fontFamily: {
         sans: ['Inter', '"Plus Jakarta Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
@@ -58,7 +64,6 @@ export default {
         'soft': '0 4px 12px rgba(0, 0, 0, 0.15)',
         'medium': '0 8px 25px rgba(0, 0, 0, 0.2)',
         'glow-gold': '0 0 20px rgba(212, 175, 55, 0.4)',
-        'dark': '0 4px 20px rgba(0, 0, 0, 0.5)',
       },
       animation: {
         'glow-pulse': 'glow-pulse 2s ease-in-out infinite alternate',

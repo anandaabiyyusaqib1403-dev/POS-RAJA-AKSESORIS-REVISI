@@ -16,12 +16,11 @@ Website Point of Sale untuk counter HP Raja Aksesoris dengan alur kasir, input t
 - Halaman `/kasir/digital` untuk pencatatan pulsa, kuota, voucher, dan token
 - Halaman `/produk` untuk kelola produk, kode produk, mutasi stok, dan stok minimum
 - Halaman `/dashboard` untuk ringkasan omzet, grafik omzet, metode bayar, top produk, dan export CSV
-- Mode demo fallback saat env Supabase belum diisi
+- Operasional penuh langsung ke Supabase production
 
 ## Fitur tambahan (dalam pengembangan)
 
 - **Notifikasi Stok Rendah**: Alert otomatis via browser notification saat produk mendekati stok minimum
-- **Manajemen Supplier**: Modul untuk mencatat supplier, harga beli, riwayat pembelian, PO, dan tracking pengiriman
 - **Diskon dan Promo**: Sistem diskon otomatis berdasarkan jumlah beli, kategori, atau periode, dengan kode promo kustom
 - **Integrasi Printer Thermal**: Cetak struk 58mm langsung dari browser dengan template kustom
 - **Backup dan Restore Data**: Ekspor/impor data lengkap ke cloud atau lokal untuk keamanan data
@@ -63,6 +62,11 @@ npm install
 ```bash
 VITE_SUPABASE_URL=your_supabase_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+VITE_BACKEND_URL=http://localhost:3001
+
+# Backend-only, jangan pakai prefix VITE_
+FONNTE_TOKEN=YOUR_TOKEN_HERE
+FONNTE_TARGETS=6287884820507,6285659085578
 ```
 
 3. Jalankan migration SQL di:
@@ -76,7 +80,24 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 npm run dev
 ```
 
-## Demo login
+5. Jalankan backend untuk notifikasi WhatsApp shift:
 
-- `owner@raja.test` / `demo123`
-- `kasir@raja.test` / `demo123`
+```bash
+npm --prefix backend run dev
+```
+
+Manual dry-run helper Fonnte:
+
+```bash
+npm --prefix backend run test:wa
+```
+
+Kirim test WhatsApp sungguhan:
+
+```bash
+npm --prefix backend run test:wa -- --send
+```
+
+## Catatan login
+
+- Login hanya menggunakan akun pengguna yang tersedia di Supabase production.

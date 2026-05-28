@@ -1,8 +1,16 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+import PaginationBar from "../components/PaginationBar";
 import PageHeader from "../components/app/PageHeader";
 import Panel from "../components/app/Panel";
-import { useData } from "../contexts/DataContext";
+import PinConfirmationModal from "../components/PinConfirmationModal";
 import { showNotification } from "../contexts/NotificationContext";
+import {
+  isPinActionCancelledError,
+  usePinConfirmation,
+} from "../hooks/usePinConfirmation";
+import { useReports } from "../hooks/useReports";
+import { useWallet } from "../hooks/useWallet";
 import {
   walletPlatformLabelMap,
   walletPlatforms,
@@ -15,6 +23,12 @@ import {
   formatRupiah,
   parseDateInput,
 } from "../utils/format";
+import CurrencyInput from "../components/CurrencyInput";
+import { getMoneySaveFailureMessage } from "../core/money/moneyRetry";
+import {
+  createDateRangeFilters,
+  usePagedSupabaseRows,
+} from "../hooks/usePagedSupabaseRows";
 
 function getRange(period, customRange) {
   const today = new Date();
@@ -42,9 +56,32 @@ const initialForm = {
 };
 
 const LOW_BALANCE_THRESHOLD = 50000;
+const WALLET_LEDGER_SELECT = [
+  "id",
+  "platform",
+  "jenis",
+  "platform_tujuan",
+  "nominal",
+  "biaya_admin",
+  "keterangan",
+  "created_at",
+].join(", ");
 
 export default function WalletPage() {
-  const { loading, createWalletTransaction, getDashboardSummary, walletBalances } = useData();
+  const location = useLocation();
+  const {
+    createWalletTransaction,
+    refreshWallet,
+    walletBalances,
+  } = useWallet();
+  const { getDashboardSummary } = useReports();
+  const {
+    isPinModalOpen,
+    closePinModal,
+    executeSensitiveAction,
+    executeConfirmedAction,
+    actionDescription,
+  } = usePinConfirmation();
   const [period, setPeriod] = useState("today");
   const [customRange, setCustomRange] = useState({
     startDate: formatDateInput(new Date()),
@@ -52,22 +89,105 @@ export default function WalletPage() {
   });
   const [form, setForm] = useState(initialForm);
   const [submitting, setSubmitting] = useState(false);
+  const submissionRef = useRef(false);
+  const [walletHydrating, setWalletHydrating] = useState(false);
+  const [walletHydrationError, setWalletHydrationError] = useState("");
+  const walletHydrationRef = useRef(false);
+  const criticalOnly = new URLSearchParams(location.search).get("filter") === "critical";
+  const visibleWalletBalances = walletBalances
+    .filter((wallet) => wallet.id !== "cash")
+    .filter((wallet) => !criticalOnly || Number(wallet.balance || 0) <= 0);
 
   const range = useMemo(() => getRange(period, customRange), [customRange, period]);
+  const queryRange = useMemo(
+    () => ({
+      startDate: range.startDate ? formatDateInput(range.startDate) : "",
+      endDate: range.endDate ? formatDateInput(range.endDate) : "",
+    }),
+    [range]
+  );
+  const walletLedger = usePagedSupabaseRows({
+    table: "transaksi_dompet",
+    select: WALLET_LEDGER_SELECT,
+    filters: createDateRangeFilters("created_at", queryRange),
+    pageSize: 12,
+    orderBy: "created_at",
+    ascending: false,
+  });
   const summary = useMemo(() => getDashboardSummary(range), [getDashboardSummary, range]);
+  const walletRows = walletLedger.error
+    ? summary.walletTransactions.slice(0, 12)
+    : walletLedger.rows;
 
   const requiresTarget = form.jenis === "transfer_antar";
 
-  if (loading) {
-    return <div className="brand-panel px-6 py-10 text-slate-600">Memuat saldo internal...</div>;
-  }
+  const hydrateWallet = useCallback(async () => {
+    walletHydrationRef.current = true;
+    setWalletHydrating(true);
+    setWalletHydrationError("");
+
+    try {
+      await refreshWallet();
+    } catch (error) {
+      const message = error.message || "Gagal memuat saldo internal.";
+      console.error("Gagal memuat saldo internal:", error);
+      setWalletHydrationError(message);
+      showNotification("error", message);
+    } finally {
+      setWalletHydrating(false);
+    }
+  }, [refreshWallet]);
+
+  useEffect(() => {
+    if (walletHydrationRef.current) return undefined;
+
+    void hydrateWallet();
+    return undefined;
+  }, [hydrateWallet]);
+
+  const retryWalletHydration = () => {
+    walletHydrationRef.current = false;
+    void hydrateWallet();
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (submissionRef.current) return;
+    submissionRef.current = true;
+    setSubmitting(true);
+    try {
+      await executeSensitiveAction(
+        async () => {
+          await createWalletTransaction({
+            jenis: form.jenis,
+            platform: form.platform,
+            platform_tujuan: requiresTarget ? form.platform_tujuan : null,
+            nominal: Number(form.nominal),
+            biaya_admin: Number(form.biaya_admin || 0),
+            keterangan: form.keterangan,
+          });
+        },
+        "WALLET.MUTATE"
+      );
+      setForm(initialForm);
+    } catch (error) {
+      if (isPinActionCancelledError(error)) return;
+      showNotification(
+        "error",
+        getMoneySaveFailureMessage(error, "Gagal menyimpan mutasi saldo.")
+      );
+    } finally {
+      submissionRef.current = false;
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Internal Balance"
-        title="SALDO APLIKASI"
-        description="Saldo hanya berubah dari Saldo Masuk, Saldo Keluar, dan Transfer Antar Wallet. Transaksi POS memakai saldo ini untuk validasi, tanpa potong atau tambah saldo otomatis."
+        eyebrow="Saldo toko"
+        title="Saldo Aplikasi"
+        description="Pantau saldo internal toko, koreksi manual, dan alur dana dari transaksi harian."
         icon="coins"
         actions={
           <>
@@ -84,6 +204,21 @@ export default function WalletPage() {
           </>
         }
       />
+
+      {walletHydrating ? (
+        <Panel className="p-4 text-sm font-semibold text-slate-600">
+          Memuat saldo internal...
+        </Panel>
+      ) : null}
+
+      {walletHydrationError ? (
+        <Panel className="border-red-200 bg-red-50 p-4">
+          <p className="text-sm font-semibold text-red-700">{walletHydrationError}</p>
+          <button type="button" onClick={retryWalletHydration} className="brand-button-secondary mt-3">
+            Coba Lagi
+          </button>
+        </Panel>
+      ) : null}
 
       {period === "custom" ? (
         <Panel className="grid gap-3 p-5 md:grid-cols-2">
@@ -107,7 +242,13 @@ export default function WalletPage() {
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {walletBalances.filter(wallet => wallet.id !== 'cash').map((wallet) => {
+        {criticalOnly ? (
+          <div className="col-span-full flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+            Menampilkan saldo kritis dari alert dashboard.
+            <Link to="/saldo" className="underline underline-offset-4">Tampilkan semua saldo</Link>
+          </div>
+        ) : null}
+        {visibleWalletBalances.map((wallet) => {
           const balanceClass =
             wallet.balance < 0
               ? "text-rose-600"
@@ -153,9 +294,9 @@ export default function WalletPage() {
               </p>
               <p className="mt-2 text-sm text-slate-500">
                 {wallet.type === "validated"
-                  ? "Wajib cukup sebelum transaksi diproses."
+                  ? "Dipakai untuk modal layanan dan koreksi saldo."
                   : wallet.type === "qris"
-                    ? "QRIS selalu boleh dan transaksi tidak mengubah saldo."
+                    ? "QRIS bertambah dari transaksi kasir."
                     : "Cash selalu boleh dipakai."}
               </p>
             </Panel>
@@ -169,29 +310,10 @@ export default function WalletPage() {
             Mutasi saldo
           </h3>
           <p className="mt-2 text-sm leading-7 text-slate-600">
-            Gunakan form ini untuk update saldo manual. Transaksi penjualan, layanan, dan logistik
-            tidak akan mengubah saldo wallet.
+            Catat koreksi saldo di sini. Transaksi harian akan ikut membentuk saldo yang tampil.
           </p>
           <form
-            onSubmit={async (event) => {
-              event.preventDefault();
-              setSubmitting(true);
-              try {
-                await createWalletTransaction({
-                  jenis: form.jenis,
-                  platform: form.platform,
-                  platform_tujuan: requiresTarget ? form.platform_tujuan : null,
-                  nominal: Number(form.nominal),
-                  biaya_admin: Number(form.biaya_admin || 0),
-                  keterangan: form.keterangan,
-                });
-                setForm(initialForm);
-              } catch (error) {
-                showNotification("error", error.message || "Gagal menyimpan mutasi saldo.");
-              } finally {
-                setSubmitting(false);
-              }
-            }}
+            onSubmit={handleSubmit}
             className="mt-5 grid gap-4 md:grid-cols-2"
           >
             <select
@@ -234,22 +356,16 @@ export default function WalletPage() {
                 ))}
               </select>
             ) : null}
-            <input
-              type="number"
-              min="0"
+            <CurrencyInput
               value={form.nominal}
-              onChange={(event) => setForm((prev) => ({ ...prev, nominal: event.target.value }))}
+              onChange={(value) => setForm((prev) => ({ ...prev, nominal: value }))}
               className="brand-input"
               placeholder="Nominal"
               required
             />
-            <input
-              type="number"
-              min="0"
+            <CurrencyInput
               value={form.biaya_admin}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, biaya_admin: event.target.value }))
-              }
+              onChange={(value) => setForm((prev) => ({ ...prev, biaya_admin: value }))}
               className="brand-input"
               placeholder="Biaya admin"
             />
@@ -270,9 +386,19 @@ export default function WalletPage() {
         </Panel>
 
         <Panel variant="strong" className="p-6">
-          <h3 className="font-display text-2xl font-bold tracking-tight text-slate-950">
-            Riwayat saldo
-          </h3>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 className="font-display text-2xl font-bold tracking-tight text-slate-950">
+                Riwayat saldo
+              </h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Data ledger dimuat per halaman supaya menu saldo tetap ringan.
+              </p>
+            </div>
+            {walletLedger.loading ? (
+              <span className="brand-badge-neutral">Memuat</span>
+            ) : null}
+          </div>
           <div className="brand-scrollbar mt-5 overflow-x-auto">
             <table className="brand-table">
               <thead>
@@ -286,37 +412,70 @@ export default function WalletPage() {
                 </tr>
               </thead>
               <tbody>
-                {summary.walletTransactions.map((transaction) => (
-                  <tr key={transaction.id}>
-                    <td className="text-slate-600">
-                      {formatDateTime(transaction.created_at, {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      })}
+                {walletRows.length ? (
+                  walletRows.map((transaction) => (
+                    <tr key={transaction.id}>
+                      <td className="text-slate-600">
+                        {formatDateTime(transaction.created_at, {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })}
+                      </td>
+                      <td className="font-semibold text-slate-950">
+                        {walletPlatformLabelMap[transaction.platform] || transaction.platform}
+                      </td>
+                      <td className="text-slate-600">
+                        {walletTransactionTypeLabelMap[transaction.jenis] || transaction.jenis}
+                      </td>
+                      <td className="text-slate-600">
+                        {transaction.platform_tujuan
+                          ? walletPlatformLabelMap[transaction.platform_tujuan] ||
+                            transaction.platform_tujuan
+                          : "-"}
+                      </td>
+                      <td className="text-right text-slate-600">
+                        {formatRupiah(transaction.nominal)}
+                      </td>
+                      <td className="text-slate-600">{transaction.keterangan || "-"}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="6" className="py-10 text-center text-slate-500">
+                      Belum ada riwayat saldo pada periode ini.
                     </td>
-                    <td className="font-semibold text-slate-950">
-                      {walletPlatformLabelMap[transaction.platform] || transaction.platform}
-                    </td>
-                    <td className="text-slate-600">
-                      {walletTransactionTypeLabelMap[transaction.jenis] || transaction.jenis}
-                    </td>
-                    <td className="text-slate-600">
-                      {transaction.platform_tujuan
-                        ? walletPlatformLabelMap[transaction.platform_tujuan] ||
-                          transaction.platform_tujuan
-                        : "-"}
-                    </td>
-                    <td className="text-right text-slate-600">
-                      {formatRupiah(transaction.nominal)}
-                    </td>
-                    <td className="text-slate-600">{transaction.keterangan || "-"}</td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
+          {!walletLedger.error ? (
+            <PaginationBar
+              page={walletLedger.page}
+              pageCount={walletLedger.pageCount}
+              from={walletLedger.from}
+              to={walletLedger.to}
+              count={walletLedger.count}
+              onPageChange={walletLedger.setPage}
+            />
+          ) : null}
         </Panel>
       </div>
+      <PinConfirmationModal
+        isOpen={isPinModalOpen}
+        onClose={closePinModal}
+        onConfirm={async () => {
+          try {
+            await executeConfirmedAction();
+          } catch (error) {
+            if (isPinActionCancelledError(error)) return;
+            showNotification("error", error.message);
+          }
+        }}
+        title="Konfirmasi PIN"
+        message={`Masukkan PIN untuk lanjut: ${actionDescription}`}
+      />
     </div>
   );
 }
+

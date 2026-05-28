@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import NotificationContainer from "../components/NotificationContainer";
+import { toClientMessage } from "../utils/clientMessages";
 
 const NotificationContext = createContext(null);
 
@@ -30,12 +31,16 @@ function normalizeType(type) {
 }
 
 function createNotificationPayload(type, message, options = {}) {
-  const normalizedMessage = String(message ?? "").trim();
+  const normalizedType = normalizeType(type);
+  const normalizedMessage =
+    normalizedType === "error"
+      ? toClientMessage(message)
+      : String(message ?? "").trim().replace(/\bowner\b/gi, "pemilik toko");
   if (!normalizedMessage) return null;
 
   return {
     id: options.id || createNotificationId(),
-    type: normalizeType(type),
+    type: normalizedType,
     message: normalizedMessage,
     duration:
       typeof options.duration === "number" && options.duration >= 0

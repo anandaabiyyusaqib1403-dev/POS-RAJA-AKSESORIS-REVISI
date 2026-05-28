@@ -13,13 +13,22 @@ export const supabase = supabaseEnabled
           return { data: { session: null }, error: null };
         },
         async signInWithPassword() {
-          return { data: null, error: new Error("Supabase belum dikonfigurasi.") };
+          return { data: null, error: new Error("Aplikasi belum terhubung ke data toko.") };
         },
         async signOut() {
           return { error: null };
         },
+        onAuthStateChange() {
+          return {
+            data: {
+              subscription: {
+                unsubscribe() {},
+              },
+            },
+          };
+        },
       },
       from() {
-        throw new Error("Supabase belum dikonfigurasi.");
+        throw new Error("Aplikasi belum terhubung ke data toko.");
       },
     };

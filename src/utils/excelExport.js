@@ -1,5 +1,5 @@
+import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
-import * as XLSX from "xlsx";
 import { formatDateInput, formatRupiah } from "./format";
 
 const HEADER_FILL = "D4AF37";
@@ -21,60 +21,13 @@ function normalizeNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
-function getColumnLetter(index) {
-  let currentIndex = index + 1;
-  let label = "";
-
-  while (currentIndex > 0) {
-    const remainder = (currentIndex - 1) % 26;
-    label = String.fromCharCode(65 + remainder) + label;
-    currentIndex = Math.floor((currentIndex - 1) / 26);
-  }
-
-  return label;
-}
-
 function sanitizeSheetName(name) {
-  return String(name || "Sheet")
-    .replace(/[\\/?*[\]:]/g, " ")
-    .trim()
-    .slice(0, 31) || "Sheet";
-}
-
-function createBorder() {
-  return {
-    top: { style: "thin", color: { rgb: BORDER_COLOR } },
-    right: { style: "thin", color: { rgb: BORDER_COLOR } },
-    bottom: { style: "thin", color: { rgb: BORDER_COLOR } },
-    left: { style: "thin", color: { rgb: BORDER_COLOR } },
-  };
-}
-
-function createAlignment(horizontal = "left", wrapText = false) {
-  return {
-    vertical: "center",
-    horizontal,
-    wrapText,
-  };
-}
-
-function mergeStyles(...styles) {
-  return styles.reduce(
-    (accumulator, style) => ({
-      ...accumulator,
-      ...style,
-      fill: style.fill || accumulator.fill,
-      font: style.font || accumulator.font,
-      border: style.border || accumulator.border,
-      alignment: style.alignment || accumulator.alignment,
-    }),
-    {}
+  return (
+    String(name || "Sheet")
+      .replace(/[\\/?*[\]:]/g, " ")
+      .trim()
+      .slice(0, 31) || "Sheet"
   );
-}
-
-function applyCellStyle(sheet, address, style) {
-  if (!sheet[address]) return;
-  sheet[address].s = mergeStyles(sheet[address].s || {}, style);
 }
 
 function getColumnAlignment(column) {
@@ -85,14 +38,8 @@ function getColumnAlignment(column) {
 }
 
 function getDisplayLength(value, type) {
-  if (type === "currency") {
-    return formatRupiah(value).length;
-  }
-
-  if (type === "number") {
-    return normalizeNumber(value).toLocaleString("id-ID").length;
-  }
-
+  if (type === "currency") return formatRupiah(value).length;
+  if (type === "number") return normalizeNumber(value).toLocaleString("id-ID").length;
   return normalizeText(value).length;
 }
 
@@ -130,23 +77,26 @@ function buildColumnWidths(columns, rows) {
       return Math.max(widest, cellLength);
     }, column.header.length);
 
-    return {
-      wch: Math.min(column.maxWidth, Math.max(column.minWidth, contentWidth + 2)),
-    };
+    return Math.min(column.maxWidth, Math.max(column.minWidth, contentWidth + 2));
   });
 }
 
-function buildRowHeights(metadataCount, rowCount) {
-  return [
-    { hpx: 34 },
-    ...Array.from({ length: metadataCount }, () => ({ hpx: 22 })),
-    { hpx: 10 },
-    { hpx: 26 },
-    ...Array.from({ length: rowCount }, () => ({ hpx: 22 })),
-  ];
+function createBorder() {
+  return {
+    top: { style: "thin", color: { argb: BORDER_COLOR } },
+    right: { style: "thin", color: { argb: BORDER_COLOR } },
+    bottom: { style: "thin", color: { argb: BORDER_COLOR } },
+    left: { style: "thin", color: { argb: BORDER_COLOR } },
+  };
 }
 
-function buildWorksheet(config) {
+function styleRow(row, style) {
+  row.eachCell((cell) => {
+    Object.assign(cell, style);
+  });
+}
+
+function buildWorksheet(workbook, config) {
   const title = config.title || "Laporan";
   const metadataRows = (config.metadataRows || []).map(([label, value]) => [
     normalizeText(label),
@@ -154,113 +104,73 @@ function buildWorksheet(config) {
   ]);
   const columns = normalizeColumns(config.columns || []);
   const rows = normalizeRows(columns, config.rows || []);
-  const rowMatrix = rows.map((row) => columns.map((column) => row[column.key]));
-  const sheetRows = [
-    [title],
-    ...metadataRows,
-    [],
-    columns.map((column) => column.header),
-    ...rowMatrix,
-  ];
+  const worksheet = workbook.addWorksheet(sanitizeSheetName(config.name || title));
+  const lastColumn = Math.max(columns.length, 1);
 
-  const worksheet = XLSX.utils.aoa_to_sheet(sheetRows);
-  const lastColumnIndex = Math.max(columns.length - 1, 0);
-  const lastColumnLetter = getColumnLetter(lastColumnIndex);
-  const headerRowNumber = metadataRows.length + 3;
-  const dataStartRowNumber = headerRowNumber + 1;
-  const dataEndRowNumber = dataStartRowNumber + rows.length - 1;
+  worksheet.addRow([title]);
+  worksheet.mergeCells(1, 1, 1, lastColumn);
+  worksheet.getCell(1, 1).fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: TITLE_FILL },
+  };
+  worksheet.getCell(1, 1).font = { bold: true, size: 16, color: { argb: TEXT_DARK } };
+  worksheet.getCell(1, 1).alignment = { vertical: "middle", horizontal: "center" };
+  worksheet.getRow(1).height = 25;
 
-  worksheet["!merges"] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: lastColumnIndex } },
-    ...metadataRows
-      .filter(() => lastColumnIndex >= 1)
-      .map((_, index) => ({
-        s: { r: index + 1, c: 1 },
-        e: { r: index + 1, c: lastColumnIndex },
-      })),
-  ];
-  worksheet["!cols"] = buildColumnWidths(columns, rows);
-  worksheet["!rows"] = buildRowHeights(metadataRows.length, rows.length);
-
-  if (rows.length) {
-    worksheet["!autofilter"] = {
-      ref: `A${headerRowNumber}:${lastColumnLetter}${dataEndRowNumber}`,
+  metadataRows.forEach((metadata) => {
+    const row = worksheet.addRow(metadata);
+    row.getCell(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: META_FILL },
     };
-  }
-
-  const titleStyle = {
-    fill: { patternType: "solid", fgColor: { rgb: TITLE_FILL } },
-    font: { bold: true, sz: 16, color: { rgb: TEXT_DARK } },
-    alignment: createAlignment("center"),
-  };
-  const metaLabelStyle = {
-    fill: { patternType: "solid", fgColor: { rgb: META_FILL } },
-    font: { bold: true, color: { rgb: TEXT_DARK } },
-    border: createBorder(),
-    alignment: createAlignment("left"),
-  };
-  const metaValueStyle = {
-    border: createBorder(),
-    alignment: createAlignment("left", true),
-  };
-  const headerStyle = {
-    fill: { patternType: "solid", fgColor: { rgb: HEADER_FILL } },
-    font: { bold: true, color: { rgb: TEXT_LIGHT } },
-    border: createBorder(),
-    alignment: createAlignment("center", true),
-  };
-  const defaultCellStyle = {
-    border: createBorder(),
-    alignment: createAlignment("left", true),
-  };
-
-  // SheetJS community reliably preserves structure, widths, and number formats.
-  // The style objects below are kept so the workbook is ready for a style-capable
-  // SheetJS-compatible writer if the project upgrades later.
-  applyCellStyle(worksheet, "A1", titleStyle);
-
-  metadataRows.forEach((_, index) => {
-    const rowNumber = index + 2;
-    applyCellStyle(worksheet, `A${rowNumber}`, metaLabelStyle);
-    applyCellStyle(worksheet, `${lastColumnIndex >= 1 ? "B" : "A"}${rowNumber}`, metaValueStyle);
+    row.getCell(1).font = { bold: true, color: { argb: TEXT_DARK } };
+    row.eachCell((cell) => {
+      cell.border = createBorder();
+      cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+    });
+    if (lastColumn > 2) worksheet.mergeCells(row.number, 2, row.number, lastColumn);
   });
 
-  columns.forEach((_, index) => {
-    applyCellStyle(worksheet, `${getColumnLetter(index)}${headerRowNumber}`, headerStyle);
+  worksheet.addRow([]);
+  const headerRow = worksheet.addRow(columns.map((column) => column.header));
+  styleRow(headerRow, {
+    fill: { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_FILL } },
+    font: { bold: true, color: { argb: TEXT_LIGHT } },
+    border: createBorder(),
+    alignment: { vertical: "middle", horizontal: "center", wrapText: true },
   });
 
-  rows.forEach((_, rowIndex) => {
-    const rowNumber = dataStartRowNumber + rowIndex;
-
-    columns.forEach((column, columnIndex) => {
-      const cellAddress = `${getColumnLetter(columnIndex)}${rowNumber}`;
-      applyCellStyle(
-        worksheet,
-        cellAddress,
-        mergeStyles(defaultCellStyle, {
-          alignment: createAlignment(
-            getColumnAlignment(column),
-            column.type !== "currency" && column.type !== "number"
-          ),
-        })
-      );
-
-      if (!worksheet[cellAddress]) return;
-      if (column.type === "currency") {
-        worksheet[cellAddress].z = CURRENCY_FORMAT;
-      }
-      if (column.type === "number") {
-        worksheet[cellAddress].z = NUMBER_FORMAT;
-      }
+  rows.forEach((row) => {
+    const dataRow = worksheet.addRow(columns.map((column) => row[column.key]));
+    columns.forEach((column, index) => {
+      const cell = dataRow.getCell(index + 1);
+      cell.border = createBorder();
+      cell.alignment = {
+        vertical: "middle",
+        horizontal: getColumnAlignment(column),
+        wrapText: column.type !== "currency" && column.type !== "number",
+      };
+      if (column.type === "currency") cell.numFmt = CURRENCY_FORMAT;
+      if (column.type === "number") cell.numFmt = NUMBER_FORMAT;
     });
   });
+
+  worksheet.columns = buildColumnWidths(columns, rows).map((width) => ({ width }));
+  if (rows.length) {
+    worksheet.autoFilter = {
+      from: { row: metadataRows.length + 3, column: 1 },
+      to: { row: metadataRows.length + 3, column: lastColumn },
+    };
+  }
 
   return worksheet;
 }
 
-export function exportWorkbook(config) {
+export async function exportWorkbook(config) {
   const exportedAt = config.exportedAt ? new Date(config.exportedAt) : new Date();
-  const workbook = XLSX.utils.book_new();
+  const workbook = new ExcelJS.Workbook();
   const sheets = Array.isArray(config.sheets) ? config.sheets : [];
   const safeFileName =
     String(config.fileName || `Laporan_${formatDateInput(exportedAt)}.xlsx`).replace(
@@ -268,28 +178,12 @@ export function exportWorkbook(config) {
       ""
     ) + ".xlsx";
 
-  sheets.forEach((sheet, index) => {
-    const worksheet = buildWorksheet(sheet);
-    XLSX.utils.book_append_sheet(
-      workbook,
-      worksheet,
-      sanitizeSheetName(sheet.name || `Sheet ${index + 1}`)
-    );
-  });
+  sheets.forEach((sheet) => buildWorksheet(workbook, sheet));
+  workbook.creator = "Raja Aksesoris POS";
+  workbook.company = "Raja Aksesoris";
+  workbook.created = exportedAt;
 
-  workbook.Props = {
-    Author: "Raja Aksesoris POS",
-    Company: "Raja Aksesoris",
-    CreatedDate: exportedAt,
-    ...config.props,
-  };
-
-  const buffer = XLSX.write(workbook, {
-    bookType: "xlsx",
-    type: "array",
-    cellStyles: true,
-  });
-
+  const buffer = await workbook.xlsx.writeBuffer();
   saveAs(
     new Blob([buffer], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

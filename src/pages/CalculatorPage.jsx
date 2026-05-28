@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
+import FeatureLoadPanel from "../components/FeatureLoadPanel";
 import MetricCard from "../components/app/MetricCard";
 import PageHeader from "../components/app/PageHeader";
 import Panel from "../components/app/Panel";
-import { useData } from "../contexts/DataContext";
+import { useReports } from "../hooks/useReports";
 import { formatDateInput, formatRupiah, parseDateInput } from "../utils/format";
 
 const denominations = [100000, 50000, 20000, 10000, 5000, 2000, 1000];
@@ -15,7 +16,12 @@ function createInitialCounts() {
 }
 
 export default function CalculatorPage() {
-  const { getDashboardSummary } = useData();
+  const {
+    coreError,
+    coreLoading,
+    getDashboardSummary,
+    refreshTransactions,
+  } = useReports();
   const [date, setDate] = useState(formatDateInput(new Date()));
   const [counts, setCounts] = useState(createInitialCounts());
 
@@ -40,23 +46,30 @@ export default function CalculatorPage() {
       <PageHeader
         eyebrow="Cash Count"
         title="Kalkulator laci kas"
-        description="Hitung uang fisik per pecahan lalu bandingkan langsung dengan saldo sistem pada tanggal yang dipilih."
+        description="Hitung uang fisik per pecahan, lalu cocokkan dengan catatan kas hari itu."
         icon="calculator"
+      />
+
+      <FeatureLoadPanel
+        error={coreError}
+        loading={coreLoading}
+        loadingText="Sinkronisasi data kas..."
+        onRetry={refreshTransactions}
       />
 
       <div className="grid gap-4 xl:grid-cols-3">
         <MetricCard label="Total uang fisik" value={formatRupiah(cashTotal)} />
-        <MetricCard label="Saldo sistem" value={formatRupiah(systemCash)} accent="gold" />
+        <MetricCard label="Kas tercatat" value={formatRupiah(systemCash)} accent="gold" />
         <MetricCard
           label="Selisih"
           value={formatRupiah(difference)}
           accent={difference === 0 ? "success" : difference > 0 ? "gold" : "danger"}
           helper={
             difference === 0
-              ? "Cocok dengan saldo sistem"
+              ? "Sudah cocok dengan catatan"
               : difference > 0
-                ? "Uang fisik lebih besar dari sistem"
-                : "Uang fisik lebih kecil dari sistem"
+                ? "Uang fisik lebih besar dari catatan"
+                : "Uang fisik lebih kecil dari catatan"
           }
         />
       </div>
@@ -85,7 +98,7 @@ export default function CalculatorPage() {
             {denominations.map((value) => (
               <div
                 key={value}
-                className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 md:grid-cols-[1fr_140px_1fr]"
+                className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-4 md:grid-cols-[1fr_140px_1fr]"
               >
                 <div>
                   <p className="text-sm font-semibold text-slate-950">{formatRupiah(value)}</p>
@@ -123,7 +136,7 @@ export default function CalculatorPage() {
           <div className="mt-6 space-y-4">
             {[
               { label: "Total uang fisik", value: formatRupiah(cashTotal) },
-              { label: "Saldo sistem", value: formatRupiah(systemCash) },
+              { label: "Kas tercatat", value: formatRupiah(systemCash) },
               {
                 label: "Selisih",
                 value: formatRupiah(difference),
@@ -137,7 +150,7 @@ export default function CalculatorPage() {
             ].map((item) => (
               <div
                 key={item.label}
-                className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
+                className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-4"
               >
                 <span className="text-sm text-slate-600">{item.label}</span>
                 <span className={`text-lg font-bold text-slate-950 ${item.tone || ""}`}>{item.value}</span>
@@ -145,12 +158,13 @@ export default function CalculatorPage() {
             ))}
           </div>
 
-          <div className="mt-6 rounded-2xl border border-[var(--brand-gold)]/16 bg-[var(--brand-gold)]/8 px-4 py-4 text-sm leading-7 text-slate-700">
-            Jika ada selisih, cek kembali pencatatan pengeluaran operasional, setoran tunai, atau
-            transaksi yang belum dimasukkan ke sistem pada tanggal tersebut.
+          <div className="mt-6 rounded-lg border border-[var(--brand-gold)]/16 bg-[var(--brand-gold)]/8 px-4 py-4 text-sm leading-7 text-slate-700">
+            Kalau ada selisih, cek lagi pengeluaran operasional, setoran tunai, atau transaksi
+            yang belum dicatat pada tanggal tersebut.
           </div>
         </Panel>
       </div>
     </div>
   );
 }
+

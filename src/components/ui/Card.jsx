@@ -1,10 +1,7 @@
-// src/components/ui/Card.jsx
-import React from 'react';
-
-const Card = ({ children, className = '', ...props }) => {
+const Card = ({ children, className = "", ...props }) => {
   return (
     <div
-      className={`bg-white rounded-2xl shadow-soft border border-neutral-200 p-6 ${className}`}
+      className={`brand-panel p-6 ${className}`.trim()}
       {...props}
     >
       {children}
@@ -12,15 +9,15 @@ const Card = ({ children, className = '', ...props }) => {
   );
 };
 
-const CardHeader = ({ children, className = '' }) => (
+const CardHeader = ({ children, className = "" }) => (
   <div className={`mb-4 ${className}`}>{children}</div>
 );
 
-const CardTitle = ({ children, className = '' }) => (
-  <h3 className={`text-lg font-semibold text-neutral-900 ${className}`}>{children}</h3>
+const CardTitle = ({ children, className = "" }) => (
+  <h3 className={`text-lg font-semibold text-slate-950 ${className}`}>{children}</h3>
 );
 
-const CardContent = ({ children, className = '' }) => (
+const CardContent = ({ children, className = "" }) => (
   <div className={`${className}`}>{children}</div>
 );
 

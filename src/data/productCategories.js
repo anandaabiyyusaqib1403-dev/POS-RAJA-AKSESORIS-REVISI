@@ -13,19 +13,8 @@ export const productCategoryGroups = [
     title: "Aksesori Pendukung",
     slug: "aksesoris-pendukung",
     categories: [
-      "Holder HP",
-      "Tongsis",
-      "Memory Card",
-      "Flashdisk OTG",
-      "Waterproof Case",
-      "Speaker",
-      "Aksesoris Lainnya",
+      
     ],
-  },
-  {
-    title: "Layanan Transaksi",
-    slug: "layanan-tambahan",
-    categories: ["Top-up E-Wallet", "Pembayaran Tagihan", "Transfer / Tarik Tunai"],
   },
 ];
 

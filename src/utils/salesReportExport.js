@@ -1,733 +1,976 @@
-import { saveAs } from "file-saver";
-import * as XLSX from "xlsx/xlsx.mjs";
-import { serviceTypeLabelMap } from "../data/businessOptions";
-import { walletPlatformLabelMap } from "../data/businessOptions";
+import {
+  serviceTypeLabelMap,
+  walletAliasMap,
+  walletPlatformLabelMap,
+} from "../data/businessOptions";
+import { productServiceCategoryIds, serviceCategories } from "../data/serviceProducts";
 import { formatCashierName } from "./cashier";
-import { formatDateInput, formatDateTime, formatRupiah } from "./format";
+import { formatDateInput, formatDateTime } from "./format";
+import { loadExcelTools } from "./loadExcelTools";
 
 const REPORT_TITLE = "LAPORAN PENJUALAN RAJA AKSESORIS";
-const SUMMARY_SHEET_NAME = "Summary";
-const TRANSACTION_SHEET_NAME = "Transaksi";
+const GOLD = "FFD4AF37";
+const GOLD_SOFT = "FFFFF8E1";
+const HEADER_TEXT = "FF0F172A";
+const TEXT_MUTED = "FF64748B";
+const BORDER_COLOR = "FFD1D5DB";
 const CURRENCY_FORMAT = '"Rp" #,##0';
 const NUMBER_FORMAT = "#,##0";
-const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder();
+const DATE_FORMAT = "dd mmm yyyy hh:mm";
+const PERCENT_FORMAT = "0.00%";
 
-const STYLE_IDS = {
-  default: 0,
-  title: 1,
-  meta: 2,
-  sectionHeader: 3,
-  summaryLabel: 4,
-  summaryValueText: 5,
-  summaryValueNumber: 6,
-  summaryValueCurrency: 7,
-  tableHeader: 8,
-  bodyText: 9,
-  bodyCenter: 10,
-  bodyNumber: 11,
-  bodyCurrency: 12,
+const TYPE_LABELS = {
+  produk: "Produk",
+  layanan: "Layanan",
+  jasa: "Jasa",
 };
 
-const CUSTOM_STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <numFmts count="2">
-    <numFmt numFmtId="164" formatCode="&quot;Rp&quot; #,##0"/>
-    <numFmt numFmtId="165" formatCode="#,##0"/>
-  </numFmts>
-  <fonts count="4">
-    <font><sz val="11"/><color rgb="FF0F172A"/><name val="Calibri"/><family val="2"/></font>
-    <font><b/><sz val="16"/><color rgb="FF0F172A"/><name val="Calibri"/><family val="2"/></font>
-    <font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font>
-    <font><b/><sz val="11"/><color rgb="FF0F172A"/><name val="Calibri"/><family val="2"/></font>
-  </fonts>
-  <fills count="4">
-    <fill><patternFill patternType="none"/></fill>
-    <fill><patternFill patternType="gray125"/></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="FFD4AF37"/><bgColor indexed="64"/></patternFill></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="FFF3F4F6"/><bgColor indexed="64"/></patternFill></fill>
-  </fills>
-  <borders count="2">
-    <border><left/><right/><top/><bottom/><diagonal/></border>
-    <border>
-      <left style="thin"><color rgb="FFD1D5DB"/></left>
-      <right style="thin"><color rgb="FFD1D5DB"/></right>
-      <top style="thin"><color rgb="FFD1D5DB"/></top>
-      <bottom style="thin"><color rgb="FFD1D5DB"/></bottom>
-      <diagonal/>
-    </border>
-  </borders>
-  <cellStyleXfs count="1">
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
-  </cellStyleXfs>
-  <cellXfs count="13">
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
-    <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1">
-      <alignment horizontal="center" vertical="center"/>
-    </xf>
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1">
-      <alignment horizontal="left" vertical="center"/>
-    </xf>
-    <xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">
-      <alignment horizontal="center" vertical="center"/>
-    </xf>
-    <xf numFmtId="0" fontId="3" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">
-      <alignment horizontal="left" vertical="center"/>
-    </xf>
-    <xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1">
-      <alignment horizontal="left" vertical="center"/>
-    </xf>
-    <xf numFmtId="165" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyNumberFormat="1" applyBorder="1" applyAlignment="1">
-      <alignment horizontal="right" vertical="center"/>
-    </xf>
-    <xf numFmtId="164" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyNumberFormat="1" applyBorder="1" applyAlignment="1">
-      <alignment horizontal="right" vertical="center"/>
-    </xf>
-    <xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">
-      <alignment horizontal="center" vertical="center" wrapText="1"/>
-    </xf>
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1">
-      <alignment horizontal="left" vertical="center" wrapText="1"/>
-    </xf>
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1">
-      <alignment horizontal="center" vertical="center" wrapText="1"/>
-    </xf>
-    <xf numFmtId="165" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1">
-      <alignment horizontal="right" vertical="center"/>
-    </xf>
-    <xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1">
-      <alignment horizontal="right" vertical="center"/>
-    </xf>
-  </cellXfs>
-  <cellStyles count="1">
-    <cellStyle name="Normal" xfId="0" builtinId="0"/>
-  </cellStyles>
-  <dxfs count="0"/>
-  <tableStyles count="0" defaultTableStyle="TableStyleMedium9" defaultPivotStyle="PivotStyleMedium4"/>
-</styleSheet>`;
+const serviceCategoryLabelMap = serviceCategories.reduce((acc, category) => {
+  acc[category.value] = category.label;
+  return acc;
+}, {});
 
-const productColumns = [
-  { key: "kategori", header: "Kategori", type: "text", minWidth: 16, maxWidth: 24 },
-  { key: "namaBarang", header: "Nama Barang", type: "text", minWidth: 26, maxWidth: 42 },
-  { key: "jenis", header: "Jenis", type: "text", minWidth: 14, maxWidth: 16 },
-  { key: "merkKode", header: "Merk/Kode", type: "text", minWidth: 16, maxWidth: 24 },
-  { key: "qty", header: "QTY", type: "number", minWidth: 10, maxWidth: 12 },
-  { key: "modal", header: "Modal", type: "currency", minWidth: 16, maxWidth: 18 },
-  { key: "hargaJual", header: "Harga Jual", type: "currency", minWidth: 16, maxWidth: 18 },
-  { key: "margin", header: "Margin", type: "currency", minWidth: 16, maxWidth: 18 },
+const productServiceCategorySet = new Set(productServiceCategoryIds);
+const bankPaymentIds = new Set([
+  "bank",
+  "transfer",
+  "transfer_bank",
+  "bca",
+  "bank_mas",
+  "mandiri",
+  "bri",
+  "bni",
+  "bsi",
+  "cimb_niaga",
+  "permata",
+]);
+const ewalletPaymentIds = new Set([
+  "ewallet",
+  "e_wallet",
+  "transfer_ewallet",
+  "dana",
+  "gopay",
+  "go_pay",
+  "shopee",
+  "shopeepay",
+  "ovo",
+  "linkaja",
+  "pasar_kuota",
+  "wahana",
+]);
+
+const summaryColumns = [
+  { key: "metric", header: "Metric", type: "text", width: 28, align: "left" },
+  { key: "value", header: "Value", type: "mixed", width: 22, align: "right" },
 ];
 
-const transactionColumns = [
-  { key: "noTransaksi", header: "No Transaksi", type: "text", minWidth: 20, maxWidth: 24 },
-  { key: "tanggal", header: "Tanggal", type: "text", minWidth: 22, maxWidth: 24 },
-  { key: "kasir", header: "Kasir", type: "text", minWidth: 18, maxWidth: 24 },
-  { key: "produk", header: "Produk", type: "text", minWidth: 28, maxWidth: 46 },
-  { key: "qty", header: "Qty", type: "number", minWidth: 10, maxWidth: 12 },
-  { key: "harga", header: "Harga", type: "currency", minWidth: 16, maxWidth: 18 },
-  { key: "total", header: "Total", type: "currency", minWidth: 16, maxWidth: 18 },
-  { key: "metode", header: "Metode", type: "text", minWidth: 14, maxWidth: 18 },
+const aggregateColumns = [
+  { key: "label", header: "Nama", type: "text", width: 26, align: "left" },
+  { key: "total_transactions", header: "Total Transaksi", type: "number", width: 18, align: "right" },
+  { key: "total_revenue", header: "Total Omzet", type: "currency", width: 18, align: "right" },
+  { key: "total_cost", header: "Total Modal", type: "currency", width: 18, align: "right" },
+  { key: "total_profit", header: "Total Profit", type: "currency", width: 18, align: "right" },
+  { key: "margin", header: "Margin", type: "percentage", width: 14, align: "right" },
 ];
 
-function sanitizeText(value, fallback = "-") {
+const providerColumns = [
+  { key: "category", header: "Category", type: "text", width: 22, align: "left" },
+  { key: "provider", header: "Provider", type: "text", width: 22, align: "left" },
+  { key: "total_transactions", header: "Total Transaksi", type: "number", width: 18, align: "right" },
+  { key: "total_revenue", header: "Total Omzet", type: "currency", width: 18, align: "right" },
+  { key: "total_cost", header: "Total Modal", type: "currency", width: 18, align: "right" },
+  { key: "total_profit", header: "Total Profit", type: "currency", width: 18, align: "right" },
+];
+
+const paymentColumns = [
+  { key: "payment_customer", header: "Metode Bayar", type: "text", width: 24, align: "left" },
+  { key: "total_transactions", header: "Total Transaksi", type: "number", width: 18, align: "right" },
+  { key: "total_revenue", header: "Total Omzet", type: "currency", width: 18, align: "right" },
+];
+
+const topProductColumns = [
+  { key: "rank", header: "Rank", type: "number", width: 10, align: "center" },
+  { key: "product_name", header: "Product Name", type: "text", width: 36, align: "left" },
+  { key: "qty", header: "Qty Sold", type: "number", width: 14, align: "right" },
+  { key: "revenue", header: "Revenue", type: "currency", width: 18, align: "right" },
+  { key: "profit", header: "Profit", type: "currency", width: 18, align: "right" },
+];
+
+const detailColumns = [
+  { key: "transaction_id", header: "Transaction ID", type: "text", width: 36, align: "left" },
+  { key: "no_transaksi", header: "No Transaksi", type: "text", width: 24, align: "left" },
+  { key: "date", header: "Tanggal", type: "date", width: 22, align: "left" },
+  { key: "cashier", header: "Kasir", type: "text", width: 20, align: "left" },
+  { key: "type_label", header: "Tipe", type: "text", width: 14, align: "left" },
+  { key: "category", header: "Kategori", type: "text", width: 22, align: "left" },
+  { key: "provider", header: "Provider", type: "text", width: 20, align: "left" },
+  { key: "product_name", header: "Nama Produk / Layanan", type: "text", width: 36, align: "left" },
+  { key: "qty", header: "Qty", type: "number", width: 10, align: "right" },
+  { key: "selling_price", header: "Harga Jual", type: "currency", width: 18, align: "right" },
+  { key: "cost", header: "Modal", type: "currency", width: 18, align: "right" },
+  { key: "profit", header: "Profit", type: "currency", width: 18, align: "right" },
+  { key: "payment_customer", header: "Metode Bayar Customer", type: "text", width: 26, align: "left" },
+  { key: "target_number", header: "Nomor Tujuan", type: "text", width: 24, align: "left" },
+];
+
+function normalizeText(value, fallback = "-") {
   const text = String(value ?? "").trim();
   return text || fallback;
 }
 
-function normalizeNumber(value) {
-  const number = Number(value || 0);
-  return Number.isFinite(number) ? number : 0;
+function normalizeNullableText(value) {
+  const text = String(value ?? "").trim();
+  return text || null;
 }
 
-function formatPaymentMethod(value) {
-  const normalized = String(value || "").trim().toLowerCase();
-
-  if (!normalized) return "-";
-  if (walletPlatformLabelMap[normalized]) return walletPlatformLabelMap[normalized];
-  if (normalized === "tunai") return "Tunai";
-  if (normalized === "qris") return "QRIS";
-  if (normalized === "transfer") return "Transfer";
-
-  return normalized.replace(/\b\w/g, (letter) => letter.toUpperCase());
+function normalizeNumber(value, fallback = 0) {
+  const number = Number(value ?? fallback);
+  return Number.isFinite(number) ? number : fallback;
 }
 
-function formatCompactAmount(value) {
-  const amount = normalizeNumber(value);
-  return amount > 0 ? amount.toLocaleString("id-ID") : "";
+function normalizeKey(value, fallback = "") {
+  const raw = String(value ?? "").trim().toLowerCase();
+  const normalized = raw.replace(/[-\s]+/g, "_");
+  return walletAliasMap[normalized] || walletAliasMap[raw] || normalized || fallback;
 }
 
-function buildDigitalProductName(transaction) {
-  const serviceLabel =
-    serviceTypeLabelMap[transaction.jenis] || sanitizeText(transaction.jenis, "Layanan");
-  const provider = sanitizeText(transaction.provider, "");
-  const nominalLabel = formatCompactAmount(transaction.nominal);
-
-  return [serviceLabel, provider, nominalLabel].filter(Boolean).join(" - ");
+function titleize(value, fallback = "-") {
+  const text = normalizeText(value, fallback).replace(/_/g, " ");
+  return text.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function buildDigitalGroupKey(transaction) {
-  return [
-    sanitizeText(transaction.jenis, ""),
-    sanitizeText(transaction.provider, ""),
-    normalizeNumber(transaction.nominal),
-    normalizeNumber(transaction.harga_jual),
-    normalizeNumber(transaction.modal),
-  ].join("::");
+function formatCategoryLabel(value) {
+  const key = normalizeKey(value, "");
+  return serviceTypeLabelMap[key] || serviceCategoryLabelMap[key] || titleize(value);
 }
 
-function compareDateAsc(left, right) {
-  return new Date(left).getTime() - new Date(right).getTime();
+function formatPaymentLabel(value) {
+  const key = normalizeKey(value, "");
+
+  if (!key) return "-";
+  if (key === "split") return "Split Payment";
+  if (key === "transfer_bank") return "Transfer Bank";
+  if (key === "transfer_ewallet") return "E-Wallet";
+  return walletPlatformLabelMap[key] || titleize(key);
 }
 
-function getColumnLetter(index) {
-  let current = index + 1;
-  let column = "";
+function getPaymentGroup(value) {
+  const key = normalizeKey(value, "");
 
-  while (current > 0) {
-    const remainder = (current - 1) % 26;
-    column = String.fromCharCode(65 + remainder) + column;
-    current = Math.floor((current - 1) / 26);
+  if (!key) return "Tidak Dicatat";
+  if (key === "cash" || key === "tunai") return "Cash";
+  if (key === "qris") return "QRIS";
+  if (bankPaymentIds.has(key)) return "Transfer Bank";
+  if (ewalletPaymentIds.has(key)) return "E-Wallet";
+  if (key === "split") return "Split Payment";
+  return formatPaymentLabel(key);
+}
+
+function formatCurrencyText(value) {
+  return `Rp ${normalizeNumber(value).toLocaleString("id-ID")}`;
+}
+
+function parseDate(value) {
+  const date = value ? new Date(value) : null;
+  return date && Number.isFinite(date.getTime()) ? date : null;
+}
+
+function isDateInReportRange(value, startDate, endDate) {
+  const date = parseDate(value);
+  if (!date) return true;
+
+  if (startDate) {
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+    if (date < start) return false;
   }
 
-  return column;
+  if (endDate) {
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+    if (date > end) return false;
+  }
+
+  return true;
 }
 
-function getDisplayLength(value, type) {
-  if (type === "currency") return formatRupiah(value).length;
-  if (type === "number") return normalizeNumber(value).toLocaleString("id-ID").length;
-  return sanitizeText(value).length;
+function compareRows(left, right) {
+  const rightTime = right.date?.getTime?.() || 0;
+  const leftTime = left.date?.getTime?.() || 0;
+  if (rightTime !== leftTime) return rightTime - leftTime;
+  return String(right.no_transaksi).localeCompare(String(left.no_transaksi), "id-ID");
 }
 
-function buildColumnWidths(columns, rows) {
-  return columns.map((column) => {
-    const contentWidth = rows.reduce((widest, row) => {
-      return Math.max(widest, getDisplayLength(row[column.key], column.type));
-    }, column.header.length);
+function buildStaffNameMap(staffUsers = []) {
+  return new Map(
+    (Array.isArray(staffUsers) ? staffUsers : [])
+      .filter((staff) => staff?.id)
+      .map((staff) => [staff.id, normalizeText(staff.nama || staff.name, "")])
+  );
+}
 
-    return {
-      wch: Math.min(column.maxWidth, Math.max(column.minWidth, contentWidth + 2)),
-    };
+function getCashierName(transaction, staffNameMap) {
+  const cashierId = transaction.kasir_id || transaction.cashier_id || transaction.cashier;
+  return (
+    normalizeNullableText(transaction.cashier_name || transaction.kasir_name) ||
+    staffNameMap.get(cashierId) ||
+    formatCashierName(cashierId)
+  );
+}
+
+function getTransactionNumber(transaction, prefix) {
+  return normalizeText(
+    transaction.no_transaksi || transaction.noTransaksi || transaction.reference,
+    `${prefix}-${String(transaction.id || "").slice(0, 8).toUpperCase()}`
+  );
+}
+
+function getAccessoryPayments(transaction) {
+  if (Array.isArray(transaction.payments) && transaction.payments.length) {
+    return transaction.payments
+      .map((payment) => ({
+        method: normalizeKey(payment.method || payment.metode || payment.payment_method || "cash", "cash"),
+        amount: normalizeNumber(payment.amount ?? payment.nominal),
+      }))
+      .filter((payment) => payment.amount > 0);
+  }
+
+  return [
+    {
+      method: normalizeKey(transaction.metode_bayar || transaction.payment_method || "cash", "cash"),
+      amount: normalizeNumber(transaction.total_bayar || transaction.total),
+    },
+  ].filter((payment) => payment.amount > 0);
+}
+
+function formatPaymentDetail(payments) {
+  const validPayments = payments.filter((payment) => payment.amount > 0);
+
+  if (!validPayments.length) return "-";
+  if (validPayments.length === 1) return formatPaymentLabel(validPayments[0].method);
+
+  return validPayments
+    .map((payment) => `${formatPaymentLabel(payment.method)} ${formatCurrencyText(payment.amount)}`)
+    .join(", ");
+}
+
+function addPaymentSummaryRow(paymentRows, transactionKey, method, amount) {
+  const paymentAmount = normalizeNumber(amount);
+  if (paymentAmount <= 0) return;
+
+  paymentRows.push({
+    transaction_key: transactionKey,
+    payment_customer: getPaymentGroup(method),
+    total_revenue: paymentAmount,
   });
 }
 
-function setNumberFormat(sheet, address, formatCode) {
-  if (!sheet[address]) return;
-  sheet[address].z = formatCode;
+function getProductMap(products = []) {
+  return new Map((Array.isArray(products) ? products : []).map((product) => [product.id, product]));
 }
 
-function buildSalesReportData({
+function getLineCost(item, product, qty) {
+  const explicitTotal = normalizeNumber(item.cost_total ?? item.total_cost, NaN);
+  if (Number.isFinite(explicitTotal)) return explicitTotal;
+
+  const cost = normalizeNumber(item.cost ?? item.modal, NaN);
+  if (Number.isFinite(cost) && cost > 0) return cost;
+
+  const unitCost = normalizeNumber(
+    item.harga_beli ?? item.cost_per_unit ?? item.modal_satuan ?? product?.harga_beli,
+    0
+  );
+  return unitCost * qty;
+}
+
+function buildAccessoryRows(transactions, products, staffNameMap, paymentRows) {
+  const productMap = getProductMap(products);
+  const rows = [];
+
+  (Array.isArray(transactions) ? transactions : [])
+    .filter((transaction) => isDateInReportRange(transaction.created_at, transaction.startDate, transaction.endDate))
+    .forEach((transaction) => {
+      const transactionKey = `produk:${transaction.id || transaction.no_transaksi}`;
+      const noTransaksi = getTransactionNumber(transaction, "TRX");
+      const payments = getAccessoryPayments(transaction);
+      const paymentCustomer = formatPaymentDetail(payments);
+      const date = parseDate(transaction.created_at) || new Date();
+
+      payments.forEach((payment) =>
+        addPaymentSummaryRow(paymentRows, transactionKey, payment.method, payment.amount)
+      );
+
+      (Array.isArray(transaction.items) ? transaction.items : []).forEach((item, index) => {
+        const product = productMap.get(item.produk_id || item.product_id);
+        const qty = normalizeNumber(item.qty || 0);
+        const sellingPrice = normalizeNumber(
+          item.selling_price ?? item.subtotal ?? normalizeNumber(item.harga_satuan) * qty
+        );
+        const cost = getLineCost(item, product, qty);
+        const profit = normalizeNumber(item.profit, sellingPrice - cost);
+
+        rows.push({
+          id: `${transactionKey}:${item.id || index}`,
+          transaction_key: transactionKey,
+          transaction_id: transaction.id || noTransaksi,
+          no_transaksi: noTransaksi,
+          date,
+          cashier: getCashierName(transaction, staffNameMap),
+          type: "produk",
+          type_label: TYPE_LABELS.produk,
+          category: normalizeText(item.category || item.kategori || product?.kategori, "Aksesoris"),
+          provider: normalizeNullableText(item.provider || product?.provider),
+          product_name: normalizeText(item.nama_produk || item.product_name || product?.nama, "Produk"),
+          qty,
+          selling_price: sellingPrice,
+          cost,
+          profit,
+          payment_customer: paymentCustomer,
+          payment_group: payments.length === 1 ? getPaymentGroup(payments[0].method) : "Split Payment",
+          target_number: "",
+        });
+      });
+    });
+
+  return rows;
+}
+
+function getDigitalType(category) {
+  return productServiceCategorySet.has(normalizeKey(category)) ? "layanan" : "jasa";
+}
+
+function getDigitalPaymentMethod(transaction) {
+  const details =
+    transaction.transaction_details && typeof transaction.transaction_details === "object"
+      ? transaction.transaction_details
+      : {};
+
+  return (
+    details.payment_customer_label ||
+    details.payment_label ||
+    transaction.payment_customer_label ||
+    transaction.payment_method ||
+    transaction.payment_customer ||
+    "cash"
+  );
+}
+
+function getDigitalPaymentGroup(transaction) {
+  return transaction.payment_customer || transaction.payment_method || "cash";
+}
+
+function getDigitalItems(transaction) {
+  if (Array.isArray(transaction.transaction_items) && transaction.transaction_items.length) {
+    return transaction.transaction_items;
+  }
+
+  return [
+    {
+      id: transaction.id,
+      product_id: transaction.product_id || transaction.service_product_id,
+      product_name_snapshot: transaction.product_name || transaction.catatan,
+      product_name: transaction.product_name || transaction.catatan,
+      category: transaction.category || transaction.jenis,
+      provider: transaction.provider || transaction.transfer_platform || transaction.platform,
+      service_type: transaction.service_type,
+      qty: 1,
+      selling_price: transaction.selling_price ?? transaction.harga_jual ?? transaction.total,
+      subtotal: transaction.selling_price ?? transaction.harga_jual ?? transaction.total,
+      cost: transaction.cost ?? transaction.modal,
+      cost_total: transaction.cost ?? transaction.modal,
+      profit: transaction.profit ?? transaction.keuntungan,
+      target_number: transaction.target_number || transaction.nomor_tujuan,
+      customer_name: transaction.customer_name || transaction.nama_tujuan,
+    },
+  ];
+}
+
+function buildDigitalRows(transactions, staffNameMap, paymentRows) {
+  const rows = [];
+
+  (Array.isArray(transactions) ? transactions : []).forEach((transaction) => {
+    const transactionKey = `digital:${transaction.id || transaction.no_transaksi}`;
+    const noTransaksi = getTransactionNumber(transaction, "LYN");
+    const date = parseDate(transaction.created_at) || new Date();
+    const rawPayment = getDigitalPaymentGroup(transaction);
+    const paymentCustomer = formatPaymentLabel(getDigitalPaymentMethod(transaction));
+    const sourceAmount = normalizeNumber(
+      transaction.selling_price ?? transaction.harga_jual ?? transaction.total ?? transaction.nominal
+    );
+
+    addPaymentSummaryRow(paymentRows, transactionKey, rawPayment, sourceAmount);
+
+    getDigitalItems(transaction).forEach((item, index) => {
+      const qty = Math.max(1, normalizeNumber(item.qty || 1));
+      const rawCategory = item.category || transaction.category || transaction.jenis;
+      const type = getDigitalType(rawCategory);
+      const sellingPrice = normalizeNumber(
+        item.subtotal ?? normalizeNumber(item.selling_price ?? item.price) * qty
+      );
+      const cost = normalizeNumber(
+        item.cost_total ?? normalizeNumber(item.cost ?? item.modal) * qty
+      );
+      const profit = normalizeNumber(item.profit, sellingPrice - cost);
+
+      rows.push({
+        id: `${transactionKey}:${item.id || index}`,
+        transaction_key: transactionKey,
+        transaction_id: transaction.id || noTransaksi,
+        no_transaksi: noTransaksi,
+        date,
+        cashier: getCashierName(transaction, staffNameMap),
+        type,
+        type_label: TYPE_LABELS[type],
+        category: formatCategoryLabel(rawCategory),
+        provider: normalizeNullableText(
+          item.provider || transaction.provider || transaction.transfer_platform || transaction.platform
+        ),
+        product_name: normalizeText(
+          item.product_name_snapshot || item.product_name || transaction.product_name || transaction.catatan,
+          type === "layanan" ? "Layanan Digital" : "Jasa"
+        ),
+        qty,
+        selling_price: sellingPrice,
+        cost,
+        profit,
+        payment_customer: paymentCustomer,
+        payment_group: getPaymentGroup(rawPayment),
+        target_number: normalizeText(
+          item.target_number || transaction.target_number || transaction.nomor_tujuan,
+          ""
+        ),
+      });
+    });
+  });
+
+  return rows;
+}
+
+function buildLogisticsRows(transactions, staffNameMap, paymentRows) {
+  const rows = [];
+
+  (Array.isArray(transactions) ? transactions : []).forEach((transaction) => {
+    const transactionKey = `jasa:${transaction.id || transaction.no_transaksi}`;
+    const noTransaksi = getTransactionNumber(transaction, "LOG");
+    const courier = normalizeText(transaction.courier || transaction.ekspedisi, "Logistik");
+    const packageType = normalizeText(transaction.packageType || transaction.package_type, "Paket");
+    const paymentMethod = transaction.paymentMethod || transaction.payment_method || "cash";
+    const sellingPrice = normalizeNumber(transaction.price ?? transaction.harga_jual);
+    const cost = normalizeNumber(transaction.cost ?? transaction.modal);
+    const profit = normalizeNumber(transaction.profit ?? transaction.keuntungan, sellingPrice - cost);
+
+    addPaymentSummaryRow(paymentRows, transactionKey, paymentMethod, sellingPrice);
+
+    rows.push({
+      id: transactionKey,
+      transaction_key: transactionKey,
+      transaction_id: transaction.id || noTransaksi,
+      no_transaksi: noTransaksi,
+      date: parseDate(transaction.created_at) || new Date(),
+      cashier: getCashierName(transaction, staffNameMap),
+      type: "jasa",
+      type_label: TYPE_LABELS.jasa,
+      category: "Logistik",
+      provider: courier,
+      product_name: ["Pengiriman", courier, packageType].filter(Boolean).join(" - "),
+      qty: 1,
+      selling_price: sellingPrice,
+      cost,
+      profit,
+      payment_customer: formatPaymentLabel(paymentMethod),
+      payment_group: getPaymentGroup(paymentMethod),
+      target_number: normalizeText(transaction.no_resi || transaction.destination, ""),
+    });
+  });
+
+  return rows;
+}
+
+function createEmptyTotals() {
+  return {
+    transactionKeys: new Set(),
+    total_transactions: 0,
+    total_revenue: 0,
+    total_cost: 0,
+    total_profit: 0,
+    margin: 0,
+  };
+}
+
+function finalizeTotals(totals) {
+  const totalTransactions = totals.transactionKeys?.size ?? totals.total_transactions;
+  return {
+    ...totals,
+    transactionKeys: undefined,
+    total_transactions: totalTransactions,
+    margin: totals.total_revenue > 0 ? totals.total_profit / totals.total_revenue : 0,
+  };
+}
+
+function groupDetailRows(rows, getKey, createBase) {
+  const grouped = new Map();
+
+  rows.forEach((row) => {
+    const key = getKey(row);
+    if (!key) return;
+
+    const current = grouped.get(key) || {
+      ...createEmptyTotals(),
+      ...createBase(row, key),
+    };
+
+    current.transactionKeys.add(row.transaction_key);
+    current.total_revenue += row.selling_price;
+    current.total_cost += row.cost;
+    current.total_profit += row.profit;
+    grouped.set(key, current);
+  });
+
+  return [...grouped.values()]
+    .map(finalizeTotals)
+    .sort((left, right) => right.total_profit - left.total_profit || right.total_revenue - left.total_revenue);
+}
+
+function buildPaymentSummary(paymentRows) {
+  const grouped = new Map();
+
+  paymentRows.forEach((row) => {
+    const key = row.payment_customer || "Tidak Dicatat";
+    const current =
+      grouped.get(key) || {
+        payment_customer: key,
+        transactionKeys: new Set(),
+        total_transactions: 0,
+        total_revenue: 0,
+      };
+
+    current.transactionKeys.add(row.transaction_key);
+    current.total_revenue += row.total_revenue;
+    grouped.set(key, current);
+  });
+
+  return [...grouped.values()]
+    .map((row) => ({
+      payment_customer: row.payment_customer,
+      total_transactions: row.transactionKeys.size,
+      total_revenue: row.total_revenue,
+    }))
+    .sort((left, right) => right.total_revenue - left.total_revenue);
+}
+
+function buildTopProducts(rows, limit = 10) {
+  const grouped = new Map();
+
+  rows.forEach((row) => {
+    const key = [row.type, row.category, row.provider || "", row.product_name].join("::");
+    const current =
+      grouped.get(key) || {
+        product_name: row.product_name,
+        category: row.category,
+        type: row.type,
+        qty: 0,
+        revenue: 0,
+        profit: 0,
+      };
+
+    current.qty += row.qty;
+    current.revenue += row.selling_price;
+    current.profit += row.profit;
+    grouped.set(key, current);
+  });
+
+  return [...grouped.values()]
+    .sort((left, right) => right.qty - left.qty || right.revenue - left.revenue)
+    .slice(0, limit)
+    .map((row, index) => ({ ...row, rank: index + 1 }));
+}
+
+function buildCashierSummary(rows) {
+  return groupDetailRows(
+    rows,
+    (row) => row.cashier,
+    (row) => ({ label: row.cashier, cashier: row.cashier })
+  );
+}
+
+function buildProviderSummary(rows) {
+  return groupDetailRows(
+    rows.filter((row) => row.type === "layanan" && row.provider),
+    (row) => `${row.category}::${row.provider}`,
+    (row) => ({
+      label: `${row.category} - ${row.provider}`,
+      category: row.category,
+      provider: row.provider,
+    })
+  );
+}
+
+function buildGlobalSummary(rows) {
+  const totals = rows.reduce((acc, row) => {
+    acc.transactionKeys.add(row.transaction_key);
+    acc.total_revenue += row.selling_price;
+    acc.total_cost += row.cost;
+    acc.total_profit += row.profit;
+    acc.total_qty += row.qty;
+    return acc;
+  }, {
+    transactionKeys: new Set(),
+    total_revenue: 0,
+    total_cost: 0,
+    total_profit: 0,
+    total_qty: 0,
+  });
+
+  return {
+    total_transactions: totals.transactionKeys.size,
+    total_revenue: totals.total_revenue,
+    total_cost: totals.total_cost,
+    total_profit: totals.total_profit,
+    total_qty: totals.total_qty,
+    margin: totals.total_revenue > 0 ? totals.total_profit / totals.total_revenue : 0,
+  };
+}
+
+export function buildGlobalSalesReportData({
   products = [],
+  staffUsers = [],
   accessoryTransactions = [],
   digitalTransactions = [],
   logisticsTransactions = [],
-}) {
-  const productMap = new Map(products.map((product) => [product.id, product]));
-  const groupedProducts = new Map();
-  const transactionRows = [];
+  startDate = null,
+  endDate = null,
+  topLimit = 10,
+} = {}) {
+  const staffNameMap = buildStaffNameMap(staffUsers);
+  const paymentRows = [];
+  const scopedAccessoryTransactions = (Array.isArray(accessoryTransactions) ? accessoryTransactions : [])
+    .filter((transaction) => isDateInReportRange(transaction.created_at, startDate, endDate));
+  const scopedDigitalTransactions = (Array.isArray(digitalTransactions) ? digitalTransactions : [])
+    .filter((transaction) => isDateInReportRange(transaction.created_at, startDate, endDate));
+  const scopedLogisticsTransactions = (Array.isArray(logisticsTransactions) ? logisticsTransactions : [])
+    .filter((transaction) => isDateInReportRange(transaction.created_at, startDate, endDate));
 
-  let totalQty = 0;
-  let totalOmzet = 0;
-  let totalModal = 0;
+  const detailRows = [
+    ...buildAccessoryRows(scopedAccessoryTransactions, products, staffNameMap, paymentRows),
+    ...buildDigitalRows(scopedDigitalTransactions, staffNameMap, paymentRows),
+    ...buildLogisticsRows(scopedLogisticsTransactions, staffNameMap, paymentRows),
+  ].sort(compareRows);
 
-  const sortedAccessoryTransactions = [...accessoryTransactions].sort((left, right) =>
-    compareDateAsc(left.created_at, right.created_at)
+  const globalSummary = buildGlobalSummary(detailRows);
+  const typeSummary = groupDetailRows(
+    detailRows,
+    (row) => row.type,
+    (row) => ({ label: row.type_label, type: row.type })
+  ).sort((left, right) => {
+    const order = ["produk", "layanan", "jasa"];
+    return order.indexOf(left.type) - order.indexOf(right.type);
+  });
+  const categorySummary = groupDetailRows(
+    detailRows,
+    (row) => row.category,
+    (row) => ({ label: row.category, category: row.category })
   );
-  const sortedDigitalTransactions = [...digitalTransactions].sort((left, right) =>
-    compareDateAsc(left.created_at, right.created_at)
-  );
-  const sortedLogisticsTransactions = [...logisticsTransactions].sort((left, right) =>
-    compareDateAsc(left.created_at, right.created_at)
-  );
-
-  sortedAccessoryTransactions.forEach((transaction) => {
-    const items = Array.isArray(transaction.items) ? transaction.items : [];
-
-    items.forEach((item) => {
-      const qty = normalizeNumber(item.qty);
-      const harga = normalizeNumber(item.harga_satuan);
-      const total = normalizeNumber(item.subtotal || qty * harga);
-      const product = productMap.get(item.produk_id);
-      const modalSatuan = normalizeNumber(product?.harga_beli);
-      const modal = modalSatuan * qty;
-      const margin = total - modal;
-      const productKey =
-        product?.id || `aksesoris::${sanitizeText(item.nama_produk, "Produk")}::${harga}`;
-
-      totalQty += qty;
-      totalOmzet += total;
-      totalModal += modal;
-
-      if (!groupedProducts.has(productKey)) {
-        groupedProducts.set(productKey, {
-          kategori: sanitizeText(product?.kategori, "Aksesoris"),
-          namaBarang: sanitizeText(item.nama_produk || product?.nama, "Produk"),
-          jenis: "Aksesoris",
-          merkKode: sanitizeText(product?.kode_produk, "-"),
-          qty: 0,
-          modal: 0,
-          totalJual: 0,
-          margin: 0,
-        });
-      }
-
-      const grouped = groupedProducts.get(productKey);
-      grouped.qty += qty;
-      grouped.modal += modal;
-      grouped.totalJual += total;
-      grouped.margin += margin;
-
-      transactionRows.push({
-        createdAt: transaction.created_at,
-        noTransaksi: sanitizeText(transaction.no_transaksi, `TRX-${transaction.id}`),
-        tanggal: formatDateTime(transaction.created_at, {
-          dateStyle: "medium",
-          timeStyle: "short",
-        }),
-        kasir: formatCashierName(transaction.kasir_id),
-        produk: sanitizeText(item.nama_produk || product?.nama, "Produk"),
-        qty,
-        harga,
-        total,
-        metode: formatPaymentMethod(transaction.metode_bayar),
-      });
-    });
-  });
-
-  sortedDigitalTransactions.forEach((transaction) => {
-    const qty = 1;
-    const harga = normalizeNumber(transaction.harga_jual);
-    const modal = normalizeNumber(transaction.modal);
-    const margin =
-      typeof transaction.keuntungan === "number"
-        ? normalizeNumber(transaction.keuntungan)
-        : harga - modal;
-    const productName = buildDigitalProductName(transaction);
-    const groupKey = buildDigitalGroupKey(transaction);
-
-    totalQty += qty;
-    totalOmzet += harga;
-    totalModal += modal;
-
-    if (!groupedProducts.has(groupKey)) {
-      groupedProducts.set(groupKey, {
-        kategori: serviceTypeLabelMap[transaction.jenis] || "Layanan",
-        namaBarang: productName,
-        jenis: "Layanan",
-        merkKode: sanitizeText(transaction.provider, "-"),
-        qty: 0,
-        modal: 0,
-        totalJual: 0,
-        margin: 0,
-      });
-    }
-
-    const grouped = groupedProducts.get(groupKey);
-    grouped.qty += qty;
-    grouped.modal += modal;
-    grouped.totalJual += harga;
-    grouped.margin += margin;
-
-    transactionRows.push({
-      createdAt: transaction.created_at,
-      noTransaksi: sanitizeText(transaction.no_transaksi, `LYN-${transaction.id}`),
-      tanggal: formatDateTime(transaction.created_at, {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }),
-      kasir: formatCashierName(transaction.kasir_id),
-      produk: productName,
-      qty,
-      harga,
-      total: harga,
-      metode: "-",
-    });
-  });
-
-  sortedLogisticsTransactions.forEach((transaction) => {
-    const qty = 1;
-    const harga = normalizeNumber(transaction.price || transaction.harga_jual);
-    const modal = normalizeNumber(transaction.modal);
-    const margin =
-      typeof transaction.keuntungan === "number"
-        ? normalizeNumber(transaction.keuntungan)
-        : harga - modal;
-    const courier = sanitizeText(transaction.courier || transaction.ekspedisi, "Kurir");
-    const packageType = sanitizeText(transaction.packageType || transaction.package_type, "Regular");
-    const receiver = sanitizeText(transaction.receiver || transaction.receiver_name, "Penerima");
-    const destination = sanitizeText(transaction.destination, "-");
-    const groupKey = `logistik::${courier}::${packageType}`;
-
-    totalQty += qty;
-    totalOmzet += harga;
-    totalModal += modal;
-
-    if (!groupedProducts.has(groupKey)) {
-      groupedProducts.set(groupKey, {
-        kategori: "Logistik",
-        namaBarang: `${courier} ${packageType}`,
-        jenis: "Logistik",
-        merkKode: courier,
-        qty: 0,
-        modal: 0,
-        totalJual: 0,
-        margin: 0,
-      });
-    }
-
-    const grouped = groupedProducts.get(groupKey);
-    grouped.qty += qty;
-    grouped.modal += modal;
-    grouped.totalJual += harga;
-    grouped.margin += margin;
-
-    const paymentMethod =
-      transaction.paymentMethod || transaction.payment_method || transaction.platform_sumber;
-
-    transactionRows.push({
-      createdAt: transaction.created_at,
-      noTransaksi: sanitizeText(transaction.no_transaksi, `LOG-${transaction.id}`),
-      tanggal: formatDateTime(transaction.created_at, {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }),
-      kasir: formatCashierName(transaction.kasir_id),
-      produk: `Logistik ${courier} - ${receiver} - ${destination}`,
-      qty,
-      harga,
-      total: harga,
-      metode: walletPlatformLabelMap[paymentMethod] || paymentMethod || "-",
-    });
-  });
-
-  const productRows = [...groupedProducts.values()]
-    .map((row) => ({
-      kategori: row.kategori,
-      namaBarang: row.namaBarang,
-      jenis: row.jenis,
-      merkKode: row.merkKode,
-      qty: row.qty,
-      modal: row.modal,
-      hargaJual: row.qty ? Math.round(row.totalJual / row.qty) : 0,
-      margin: row.margin,
-    }))
-    .sort((left, right) => {
-      if (left.jenis !== right.jenis) {
-        return left.jenis.localeCompare(right.jenis, "id-ID");
-      }
-      if (left.kategori !== right.kategori) {
-        return left.kategori.localeCompare(right.kategori, "id-ID");
-      }
-      return left.namaBarang.localeCompare(right.namaBarang, "id-ID");
-    });
-
-  transactionRows.sort((left, right) => {
-    const byDate = compareDateAsc(left.createdAt, right.createdAt);
-    if (byDate !== 0) return byDate;
-    return left.noTransaksi.localeCompare(right.noTransaksi, "id-ID");
-  });
+  const providerSummary = buildProviderSummary(detailRows);
+  const paymentSummary = buildPaymentSummary(paymentRows);
+  const topProducts = buildTopProducts(detailRows, topLimit);
+  const cashierSummary = buildCashierSummary(detailRows);
 
   return {
-    totals: {
-      totalTransactions:
-        accessoryTransactions.length + digitalTransactions.length + logisticsTransactions.length,
-      totalQty,
-      totalOmzet,
-      totalModal,
-      totalMargin: totalOmzet - totalModal,
-    },
-    productRows,
-    transactionRows,
+    globalSummary,
+    typeSummary,
+    categorySummary,
+    providerSummary,
+    paymentSummary,
+    topProducts,
+    cashierSummary,
+    detailRows,
   };
 }
 
-function buildSummarySheet(reportData, periodLabel, exportedAtLabel) {
-  const rows = [
-    [REPORT_TITLE],
-    [`Periode: ${periodLabel}`],
-    [`Diekspor: ${exportedAtLabel}`],
-    [],
-    ["RINGKASAN PENJUALAN"],
-    ["Total Transaksi", reportData.totals.totalTransactions],
-    ["Total Qty", reportData.totals.totalQty],
-    ["Total Omzet", reportData.totals.totalOmzet],
-    ["Total Modal", reportData.totals.totalModal],
-    ["Total Margin", reportData.totals.totalMargin],
-    [],
-    ["DETAIL PENJUALAN PRODUK"],
-    productColumns.map((column) => column.header),
-    ...reportData.productRows.map((row) => productColumns.map((column) => row[column.key])),
-  ];
+function createBorder(color = BORDER_COLOR) {
+  return {
+    top: { style: "thin", color: { argb: color } },
+    right: { style: "thin", color: { argb: color } },
+    bottom: { style: "thin", color: { argb: color } },
+    left: { style: "thin", color: { argb: color } },
+  };
+}
 
-  const sheet = XLSX.utils.aoa_to_sheet(rows);
-  const lastDataRow = 13 + reportData.productRows.length;
+function setWorkbookProperties(workbook, exportedAt) {
+  workbook.creator = "Raja Aksesoris POS";
+  workbook.company = "Raja Aksesoris";
+  workbook.created = exportedAt;
+  workbook.modified = exportedAt;
+  workbook.title = REPORT_TITLE;
+  workbook.subject = "Laporan penjualan";
+}
 
-  sheet["!merges"] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 7 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } },
-    { s: { r: 2, c: 0 }, e: { r: 2, c: 7 } },
-    { s: { r: 4, c: 0 }, e: { r: 4, c: 7 } },
-    { s: { r: 11, c: 0 }, e: { r: 11, c: 7 } },
-  ];
-  sheet["!cols"] = buildColumnWidths(productColumns, reportData.productRows);
-  sheet["!rows"] = [
-    { hpx: 30 },
-    { hpx: 22 },
-    { hpx: 22 },
-    { hpx: 10 },
-    { hpx: 24 },
-    { hpx: 22 },
-    { hpx: 22 },
-    { hpx: 22 },
-    { hpx: 22 },
-    { hpx: 22 },
-    { hpx: 10 },
-    { hpx: 24 },
-    { hpx: 24 },
-    ...reportData.productRows.map(() => ({ hpx: 22 })),
-  ];
+function addSheetTitle(sheet, title, columnCount, periodLabel, exportedAtLabel) {
+  sheet.mergeCells(1, 1, 1, columnCount);
+  const titleCell = sheet.getCell(1, 1);
+  titleCell.value = title;
+  titleCell.font = { bold: true, size: 16, color: { argb: HEADER_TEXT } };
+  titleCell.alignment = { horizontal: "center", vertical: "middle" };
+  sheet.getRow(1).height = 30;
 
-  if (reportData.productRows.length) {
-    sheet["!autofilter"] = {
-      ref: `A13:H${lastDataRow}`,
+  sheet.mergeCells(2, 1, 2, columnCount);
+  const periodCell = sheet.getCell(2, 1);
+  periodCell.value = `Periode: ${periodLabel}`;
+  periodCell.font = { color: { argb: TEXT_MUTED } };
+  periodCell.alignment = { horizontal: "center", vertical: "middle" };
+
+  sheet.mergeCells(3, 1, 3, columnCount);
+  const exportedCell = sheet.getCell(3, 1);
+  exportedCell.value = `Diekspor: ${exportedAtLabel}`;
+  exportedCell.font = { color: { argb: TEXT_MUTED } };
+  exportedCell.alignment = { horizontal: "center", vertical: "middle" };
+}
+
+function styleHeaderCell(cell) {
+  cell.font = { bold: true, color: { argb: HEADER_TEXT } };
+  cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GOLD } };
+  cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+  cell.border = createBorder();
+}
+
+function styleBodyCell(cell, column) {
+  cell.alignment = {
+    horizontal:
+      column.align || (["number", "currency", "percentage"].includes(column.type) ? "right" : "left"),
+    vertical: "middle",
+    wrapText: column.type === "text",
+  };
+  cell.border = createBorder();
+
+  if (column.type === "currency") cell.numFmt = CURRENCY_FORMAT;
+  if (column.type === "number") cell.numFmt = NUMBER_FORMAT;
+  if (column.type === "percentage") cell.numFmt = PERCENT_FORMAT;
+  if (column.type === "date") cell.numFmt = DATE_FORMAT;
+}
+
+function getDisplayText(value, column) {
+  if (value === null || value === undefined || value === "") return "";
+  if (column.type === "currency" || column.type === "number") {
+    return normalizeNumber(value).toLocaleString("id-ID");
+  }
+  if (column.type === "percentage") {
+    return `${(normalizeNumber(value) * 100).toFixed(2)}%`;
+  }
+  if (column.type === "date") {
+    return value instanceof Date
+      ? formatDateTime(value, { dateStyle: "medium", timeStyle: "short" })
+      : String(value);
+  }
+  return String(value);
+}
+
+function autoFitColumns(sheet, columns, rows) {
+  columns.forEach((column, index) => {
+    const contentWidth = rows.reduce(
+      (width, row) => Math.max(width, getDisplayText(row[column.key], column).length + 2),
+      column.header.length + 2
+    );
+
+    sheet.getColumn(index + 1).width = Math.min(56, Math.max(column.width, contentWidth));
+  });
+}
+
+function writeTable(sheet, { title, columns, rows, startRow }) {
+  let headerRowNumber = startRow;
+
+  if (title) {
+    sheet.mergeCells(startRow, 1, startRow, columns.length);
+    const titleCell = sheet.getCell(startRow, 1);
+    titleCell.value = title;
+    titleCell.font = { bold: true, color: { argb: HEADER_TEXT } };
+    titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GOLD_SOFT } };
+    titleCell.alignment = { horizontal: "left", vertical: "middle" };
+    titleCell.border = createBorder();
+    sheet.getRow(startRow).height = 24;
+    headerRowNumber += 1;
+  }
+
+  const headerRow = sheet.getRow(headerRowNumber);
+  columns.forEach((column, index) => {
+    const cell = headerRow.getCell(index + 1);
+    cell.value = column.header;
+    styleHeaderCell(cell);
+  });
+  headerRow.height = 26;
+
+  rows.forEach((row, rowIndex) => {
+    const sheetRow = sheet.getRow(headerRowNumber + rowIndex + 1);
+    columns.forEach((column, columnIndex) => {
+      const cell = sheetRow.getCell(columnIndex + 1);
+      cell.value = row[column.key] ?? "";
+      styleBodyCell(cell, column);
+    });
+    sheetRow.height = 23;
+  });
+
+  if (rows.length) {
+    sheet.autoFilter = {
+      from: { row: headerRowNumber, column: 1 },
+      to: { row: headerRowNumber + rows.length, column: columns.length },
     };
   }
 
-  ["B8", "B9", "B10"].forEach((address) => setNumberFormat(sheet, address, CURRENCY_FORMAT));
-  ["B6", "B7"].forEach((address) => setNumberFormat(sheet, address, NUMBER_FORMAT));
-
-  reportData.productRows.forEach((_, index) => {
-    const rowNumber = index + 14;
-    setNumberFormat(sheet, `E${rowNumber}`, NUMBER_FORMAT);
-    setNumberFormat(sheet, `F${rowNumber}`, CURRENCY_FORMAT);
-    setNumberFormat(sheet, `G${rowNumber}`, CURRENCY_FORMAT);
-    setNumberFormat(sheet, `H${rowNumber}`, CURRENCY_FORMAT);
-  });
-
-  const styleMap = new Map([
-    ["A1", STYLE_IDS.title],
-    ["A2", STYLE_IDS.meta],
-    ["A3", STYLE_IDS.meta],
-    ["A5", STYLE_IDS.sectionHeader],
-    ["A12", STYLE_IDS.sectionHeader],
-    ["A6", STYLE_IDS.summaryLabel],
-    ["A7", STYLE_IDS.summaryLabel],
-    ["A8", STYLE_IDS.summaryLabel],
-    ["A9", STYLE_IDS.summaryLabel],
-    ["A10", STYLE_IDS.summaryLabel],
-    ["B6", STYLE_IDS.summaryValueNumber],
-    ["B7", STYLE_IDS.summaryValueNumber],
-    ["B8", STYLE_IDS.summaryValueCurrency],
-    ["B9", STYLE_IDS.summaryValueCurrency],
-    ["B10", STYLE_IDS.summaryValueCurrency],
-  ]);
-
-  for (let index = 0; index < productColumns.length; index += 1) {
-    styleMap.set(`${getColumnLetter(index)}13`, STYLE_IDS.tableHeader);
-  }
-
-  reportData.productRows.forEach((_, index) => {
-    const rowNumber = index + 14;
-    styleMap.set(`A${rowNumber}`, STYLE_IDS.bodyText);
-    styleMap.set(`B${rowNumber}`, STYLE_IDS.bodyText);
-    styleMap.set(`C${rowNumber}`, STYLE_IDS.bodyCenter);
-    styleMap.set(`D${rowNumber}`, STYLE_IDS.bodyText);
-    styleMap.set(`E${rowNumber}`, STYLE_IDS.bodyNumber);
-    styleMap.set(`F${rowNumber}`, STYLE_IDS.bodyCurrency);
-    styleMap.set(`G${rowNumber}`, STYLE_IDS.bodyCurrency);
-    styleMap.set(`H${rowNumber}`, STYLE_IDS.bodyCurrency);
-  });
-
-  return {
-    sheet,
-    styleMap,
-  };
+  autoFitColumns(sheet, columns, rows);
 }
 
-function buildTransactionSheet(reportData, periodLabel, exportedAtLabel) {
+function buildWorksheet(workbook, name, title, columns, rows, periodLabel, exportedAtLabel) {
+  const sheet = workbook.addWorksheet(name);
+  sheet.views = [{ state: "frozen", ySplit: 5, showGridLines: false }];
+  addSheetTitle(sheet, title, columns.length, periodLabel, exportedAtLabel);
+  writeTable(sheet, {
+    columns,
+    rows,
+    startRow: 5,
+  });
+  return sheet;
+}
+
+function buildSummarySheet(workbook, reportData, periodLabel, exportedAtLabel) {
   const rows = [
-    ["DETAIL TRANSAKSI PENJUALAN"],
-    [`Periode: ${periodLabel}`],
-    [`Diekspor: ${exportedAtLabel}`],
-    [],
-    transactionColumns.map((column) => column.header),
-    ...reportData.transactionRows.map((row) => transactionColumns.map((column) => row[column.key])),
+    { metric: "Total Transaksi", value: reportData.globalSummary.total_transactions, valueType: "number" },
+    { metric: "Total Omzet", value: reportData.globalSummary.total_revenue, valueType: "currency" },
+    { metric: "Total Modal", value: reportData.globalSummary.total_cost, valueType: "currency" },
+    { metric: "Total Profit", value: reportData.globalSummary.total_profit, valueType: "currency" },
+    { metric: "Total Qty", value: reportData.globalSummary.total_qty, valueType: "number" },
+    { metric: "Margin Profit", value: reportData.globalSummary.margin, valueType: "percentage" },
   ];
+  const sheet = workbook.addWorksheet("SUMMARY");
 
-  const sheet = XLSX.utils.aoa_to_sheet(rows);
-  const lastDataRow = 5 + reportData.transactionRows.length;
-
-  sheet["!merges"] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 7 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } },
-    { s: { r: 2, c: 0 }, e: { r: 2, c: 7 } },
-  ];
-  sheet["!cols"] = buildColumnWidths(transactionColumns, reportData.transactionRows);
-  sheet["!rows"] = [
-    { hpx: 30 },
-    { hpx: 22 },
-    { hpx: 22 },
-    { hpx: 10 },
-    { hpx: 24 },
-    ...reportData.transactionRows.map(() => ({ hpx: 22 })),
-  ];
-
-  if (reportData.transactionRows.length) {
-    sheet["!autofilter"] = {
-      ref: `A5:H${lastDataRow}`,
-    };
-  }
-
-  reportData.transactionRows.forEach((_, index) => {
-    const rowNumber = index + 6;
-    setNumberFormat(sheet, `E${rowNumber}`, NUMBER_FORMAT);
-    setNumberFormat(sheet, `F${rowNumber}`, CURRENCY_FORMAT);
-    setNumberFormat(sheet, `G${rowNumber}`, CURRENCY_FORMAT);
+  sheet.views = [{ state: "frozen", ySplit: 5, showGridLines: false }];
+  addSheetTitle(sheet, "SUMMARY", summaryColumns.length, periodLabel, exportedAtLabel);
+  writeTable(sheet, {
+    title: "Ringkasan Global",
+    columns: summaryColumns,
+    rows,
+    startRow: 5,
   });
 
-  const styleMap = new Map([
-    ["A1", STYLE_IDS.title],
-    ["A2", STYLE_IDS.meta],
-    ["A3", STYLE_IDS.meta],
-  ]);
-
-  for (let index = 0; index < transactionColumns.length; index += 1) {
-    styleMap.set(`${getColumnLetter(index)}5`, STYLE_IDS.tableHeader);
-  }
-
-  reportData.transactionRows.forEach((_, index) => {
-    const rowNumber = index + 6;
-    styleMap.set(`A${rowNumber}`, STYLE_IDS.bodyText);
-    styleMap.set(`B${rowNumber}`, STYLE_IDS.bodyCenter);
-    styleMap.set(`C${rowNumber}`, STYLE_IDS.bodyText);
-    styleMap.set(`D${rowNumber}`, STYLE_IDS.bodyText);
-    styleMap.set(`E${rowNumber}`, STYLE_IDS.bodyNumber);
-    styleMap.set(`F${rowNumber}`, STYLE_IDS.bodyCurrency);
-    styleMap.set(`G${rowNumber}`, STYLE_IDS.bodyCurrency);
-    styleMap.set(`H${rowNumber}`, STYLE_IDS.bodyCenter);
+  rows.forEach((row, index) => {
+    const cell = sheet.getRow(index + 7).getCell(2);
+    cell.font = { bold: true, color: { argb: HEADER_TEXT } };
+    if (row.valueType === "currency") cell.numFmt = CURRENCY_FORMAT;
+    if (row.valueType === "number") cell.numFmt = NUMBER_FORMAT;
+    if (row.valueType === "percentage") cell.numFmt = PERCENT_FORMAT;
   });
 
-  return {
-    sheet,
-    styleMap,
-  };
+  return sheet;
 }
 
-function getZipEntryIndex(zip, path) {
-  return zip.FullPaths.findIndex((entryPath) => {
-    const normalized = String(entryPath || "").replace(/^Root Entry\//, "");
-    return normalized === path;
-  });
+function normalizeAggregateRows(rows) {
+  return rows.map((row) => ({
+    ...row,
+    label: row.label || row.category || row.cashier || "-",
+  }));
 }
 
-function getZipEntryText(zip, path) {
-  const index = getZipEntryIndex(zip, path);
-  if (index < 0) {
-    throw new Error(`Entry ${path} tidak ditemukan di workbook.`);
-  }
-
-  return textDecoder.decode(zip.FileIndex[index].content);
+function normalizeDetailRows(rows) {
+  return rows.map((row) => ({
+    ...row,
+    provider: row.provider || "",
+    target_number: row.target_number || "",
+  }));
 }
 
-function setZipEntryText(zip, path, value) {
-  const content = textEncoder.encode(value);
-  const index = getZipEntryIndex(zip, path);
-
-  if (index < 0) {
-    XLSX.CFB.utils.cfb_add(zip, path, content, { unsafe: true });
-    return;
-  }
-
-  zip.FileIndex[index].content = content;
-  zip.FileIndex[index].size = content.length;
-}
-
-function applyCellStylesToSheetXml(xml, styleMap) {
-  return xml.replace(/<c([^>]*\sr="([^"]+)"[^>]*)>/g, (match, attrs, reference) => {
-    const styleId = styleMap.get(reference);
-
-    if (styleId === undefined) return match;
-
-    const sanitizedAttrs = attrs.replace(/\ss="\d+"/, "");
-    return `<c${sanitizedAttrs} s="${styleId}">`;
-  });
-}
-
-function addFreezePane(xml, ySplit, topLeftCell) {
-  return xml.replace(
-    /<sheetViews>\s*<sheetView([^>]*)\/>\s*<\/sheetViews>/,
-    `<sheetViews><sheetView$1><pane ySplit="${ySplit}" topLeftCell="${topLeftCell}" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="${topLeftCell}" sqref="${topLeftCell}"/></sheetView></sheetViews>`
-  );
-}
-
-function finalizeWorkbook(buffer, sheetConfigs) {
-  const zip = XLSX.CFB.read(new Uint8Array(buffer), { type: "array" });
-
-  setZipEntryText(zip, "xl/styles.xml", CUSTOM_STYLES_XML);
-
-  sheetConfigs.forEach((config, index) => {
-    const path = `xl/worksheets/sheet${index + 1}.xml`;
-    let xml = getZipEntryText(zip, path);
-    xml = applyCellStylesToSheetXml(xml, config.styleMap);
-    xml = addFreezePane(xml, config.freezeRows, config.topLeftCell);
-    setZipEntryText(zip, path, xml);
-  });
-
-  return XLSX.CFB.write(zip, {
-    fileType: "zip",
-    type: "array",
-  });
-}
-
-export function buildSalesReportWorkbook(options = {}) {
+export async function buildSalesReportWorkbook(options = {}) {
+  const { ExcelJS } = await loadExcelTools();
   const exportedAt = options.exportedAt ? new Date(options.exportedAt) : new Date();
-  const periodLabel = sanitizeText(options.periodLabel, "Semua periode");
-  const reportData = buildSalesReportData({
-    products: options.products,
-    accessoryTransactions: options.accessoryTransactions,
-    digitalTransactions: options.digitalTransactions,
-    logisticsTransactions: options.logisticsTransactions,
-  });
-  const safeFileName =
-    String(
-      options.fileName || `laporan-penjualan-raja-aksesoris-${formatDateInput(exportedAt)}.xlsx`
-    ).replace(/\.xlsx$/i, "") + ".xlsx";
+  const periodLabel = normalizeText(options.periodLabel, "Semua periode");
   const exportedAtLabel = formatDateTime(exportedAt, {
     dateStyle: "full",
     timeStyle: "short",
   });
+  const reportData =
+    options.reportData ||
+    buildGlobalSalesReportData({
+      products: options.products,
+      staffUsers: options.staffUsers,
+      accessoryTransactions: options.accessoryTransactions,
+      digitalTransactions: options.digitalTransactions,
+      logisticsTransactions: options.logisticsTransactions,
+      startDate: options.startDate,
+      endDate: options.endDate,
+      topLimit: options.topLimit,
+    });
+  const workbook = new ExcelJS.Workbook();
+  const fileName =
+    String(
+      options.fileName || `Laporan_Penjualan_Raja_Aksesoris_${formatDateInput(exportedAt)}.xlsx`
+    ).replace(/\.xlsx$/i, "") + ".xlsx";
 
-  const summarySheet = buildSummarySheet(reportData, periodLabel, exportedAtLabel);
-  const transactionSheet = buildTransactionSheet(reportData, periodLabel, exportedAtLabel);
-  const workbook = XLSX.utils.book_new();
+  setWorkbookProperties(workbook, exportedAt);
+  buildSummarySheet(workbook, reportData, periodLabel, exportedAtLabel);
+  buildWorksheet(
+    workbook,
+    "TYPE SUMMARY",
+    "TYPE SUMMARY",
+    aggregateColumns,
+    normalizeAggregateRows(reportData.typeSummary),
+    periodLabel,
+    exportedAtLabel
+  );
+  buildWorksheet(
+    workbook,
+    "CATEGORY",
+    "CATEGORY SUMMARY",
+    aggregateColumns,
+    normalizeAggregateRows(reportData.categorySummary),
+    periodLabel,
+    exportedAtLabel
+  );
+  buildWorksheet(
+    workbook,
+    "PROVIDER",
+    "PROVIDER BREAKDOWN",
+    providerColumns,
+    reportData.providerSummary,
+    periodLabel,
+    exportedAtLabel
+  );
+  buildWorksheet(
+    workbook,
+    "PAYMENT",
+    "PAYMENT METHOD SUMMARY",
+    paymentColumns,
+    reportData.paymentSummary,
+    periodLabel,
+    exportedAtLabel
+  );
+  buildWorksheet(
+    workbook,
+    "TOP PRODUCT",
+    "TOP SELLING PRODUCTS",
+    topProductColumns,
+    reportData.topProducts,
+    periodLabel,
+    exportedAtLabel
+  );
+  buildWorksheet(
+    workbook,
+    "DETAIL",
+    "DETAIL TRANSACTION",
+    detailColumns,
+    normalizeDetailRows(reportData.detailRows),
+    periodLabel,
+    exportedAtLabel
+  );
 
-  XLSX.utils.book_append_sheet(workbook, summarySheet.sheet, SUMMARY_SHEET_NAME);
-  XLSX.utils.book_append_sheet(workbook, transactionSheet.sheet, TRANSACTION_SHEET_NAME);
-
-  workbook.Props = {
-    Title: REPORT_TITLE,
-    Subject: "Laporan penjualan aksesoris dan layanan",
-    Author: "Raja Aksesoris POS",
-    Company: "Raja Aksesoris",
-    CreatedDate: exportedAt,
-  };
-
-  const rawBuffer = XLSX.write(workbook, {
-    bookType: "xlsx",
-    type: "array",
-  });
-  const buffer = finalizeWorkbook(rawBuffer, [
-    { styleMap: summarySheet.styleMap, freezeRows: 13, topLeftCell: "A14" },
-    { styleMap: transactionSheet.styleMap, freezeRows: 5, topLeftCell: "A6" },
-  ]);
+  const buffer = await workbook.xlsx.writeBuffer();
 
   return {
     buffer,
-    fileName: safeFileName,
+    fileName,
     reportData,
   };
 }
 
-export function exportSalesReport(options = {}) {
-  const { buffer, fileName } = buildSalesReportWorkbook(options);
+export async function exportSalesReport(options = {}) {
+  const { saveAs } = await loadExcelTools();
+  const { buffer, fileName } = await buildSalesReportWorkbook(options);
 
   saveAs(
     new Blob([buffer], {

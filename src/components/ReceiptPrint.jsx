@@ -49,18 +49,22 @@ export default function ReceiptPrint({ selectedRow }) {
 
   return (
     <div className="receipt-print hidden print:block">
-      <div className="mx-auto w-[340px] max-w-[340px] rounded-[20px] border border-slate-200 bg-white p-5 text-slate-900">
-        <div className="space-y-1 border-b border-slate-200 pb-4 text-center">
-          <img src={logo} alt="Raja Aksesoris Logo" className="mx-auto h-12 w-auto mb-2" />
-          <p className="text-base font-black tracking-[0.3em] uppercase">Raja Aksesoris</p>
-          <p className="text-[10px] text-slate-500">Transaksi POS</p>
+      <div className="mx-auto w-[340px] max-w-[340px] overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-900">
+        <div className="h-2 bg-[linear-gradient(90deg,#0f172a_0%,#d4af37_45%,#0f172a_100%)]" />
+        <div className="space-y-1 border-b border-slate-200 px-5 pb-4 pt-5 text-center">
+          <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-xl border border-[var(--brand-gold)]/40 bg-white p-2 shadow-sm">
+            <img src={logo} alt="Raja Aksesoris Logo" className="h-full w-full object-contain" />
+          </div>
+          <p className="text-base font-black uppercase tracking-[0.22em]">Raja Aksesoris</p>
+          <div className="mx-auto h-[2px] w-16 rounded-full bg-[var(--brand-gold)]" />
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Transaksi POS</p>
           <p className="mt-2 text-[11px] font-medium text-slate-700">
             {formatDateTime(date, { dateStyle: "medium", timeStyle: "short" })}
           </p>
           <p className="text-[11px] text-slate-600">ID: {selectedRow.title}</p>
         </div>
 
-        <div className="space-y-3 border-b border-slate-200 py-4 text-[12px]">
+        <div className="space-y-3 border-b border-slate-200 px-5 py-4 text-[12px]">
           <div className="flex justify-between text-slate-500">
             <span>Customer</span>
             <span>{customer}</span>
@@ -75,7 +79,7 @@ export default function ReceiptPrint({ selectedRow }) {
           </div>
         </div>
 
-        <div className="pt-4 text-[12px]">
+        <div className="px-5 pt-4 text-[12px]">
           {receiptItems.length > 0 ? (
             <div className="space-y-3">
               {receiptItems.map((item, index) => (
@@ -98,14 +102,16 @@ export default function ReceiptPrint({ selectedRow }) {
           )}
         </div>
 
-        <div className="mt-4 space-y-2 border-t border-slate-200 pt-4 text-[12px]">
+        <div className="mx-5 mt-4 space-y-2 border-t border-slate-200 pt-4 text-[12px]">
           <div className="flex justify-between text-slate-500">
             <span>Subtotal</span>
             <span>{formatRupiah(subtotal)}</span>
           </div>
-          <div className="flex justify-between text-slate-500">
-            <span>Total</span>
-            <span>{formatRupiah(total)}</span>
+          <div className="rounded-lg bg-slate-950 px-3 py-2 text-white">
+            <div className="flex justify-between font-black">
+              <span>Total</span>
+              <span>{formatRupiah(total)}</span>
+            </div>
           </div>
           <div className="flex justify-between text-slate-500">
             <span>Bayar</span>
@@ -117,9 +123,9 @@ export default function ReceiptPrint({ selectedRow }) {
           </div>
         </div>
 
-        <div className="mt-4 border-t border-slate-200 pt-3 text-center text-[10px] text-slate-500">
+        <div className="mx-5 mt-4 border-t border-slate-200 pb-5 pt-3 text-center text-[10px] text-slate-500">
           <p>Terima kasih sudah berbelanja</p>
-          <p className="mt-1">Raja Aksesoris</p>
+          <p className="mt-1 font-bold uppercase tracking-[0.2em] text-[var(--brand-gold-strong)]">Raja Aksesoris</p>
         </div>
       </div>
     </div>

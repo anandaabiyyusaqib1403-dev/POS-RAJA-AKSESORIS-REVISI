@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import MetricCard from "../components/app/MetricCard";
+import PaginationBar from "../components/PaginationBar";
 import PageHeader from "../components/app/PageHeader";
 import Panel from "../components/app/Panel";
-import { useData } from "../contexts/DataContext";
+import PinConfirmationModal from "../components/PinConfirmationModal";
+import { useAuth } from "../contexts/useAuth";
 import { showNotification } from "../contexts/NotificationContext";
 import {
   cashCategoryLabelMap,
-  serviceTypeLabelMap,
   walletPlatformLabelMap,
   walletTransactionTypeLabelMap,
 } from "../data/businessOptions";
@@ -16,9 +17,27 @@ import {
   formatRupiah,
   parseDateInput,
 } from "../utils/format";
+import {
+  isPinActionCancelledError,
+  usePinConfirmation,
+} from "../hooks/usePinConfirmation";
+import { useProducts } from "../hooks/useProducts";
+import { useShift } from "../hooks/useShift";
+import { useTransactions } from "../hooks/useTransactions";
+import { useWallet } from "../hooks/useWallet";
+import { usePagedTransactionHistoryRows } from "../hooks/usePagedTransactionHistoryRows";
 import { formatCashierName } from "../utils/cashier";
-import { generateReceiptHTML } from "../utils/print";
-import { exportExcel } from "../utils/transactionExport";
+import { printTransactionReceipt } from "../utils/print";
+import {
+  buildDeletedHistoryRows,
+  buildHistoryRows,
+  formatPaymentMethod,
+  formatReportRangeLabel,
+  formatSignedCurrency,
+  getDaysLeft,
+  getPresetRange,
+  isInDateRange,
+} from "../features/history/services/transactionHistory";
 
 const PERIOD_OPTIONS = [
   { key: "today", label: "Hari Ini" },
@@ -43,18 +62,8 @@ const FLOW_OPTIONS = [
   { value: "internal", label: "Internal" },
 ];
 
-const paymentMethodLabelMap = {
-  cash: "Cash",
-  tunai: "Tunai",
-  qris: "QRIS",
-  transfer: "Transfer",
-  dana: "DANA",
-  bank_mas: "Bank Mas",
-  wahana: "Wahana",
-  pasar_kuota: "PASAR KUOTA",
-  shopee: "Shopee",
-  bca: "BCA",
-};
+const HISTORY_PAGE_SIZE = 25;
+const DELETED_PAGE_SIZE = 10;
 
 const PAYMENT_METHODS = [
   "cash",
@@ -105,320 +114,24 @@ const flowAppearance = {
   },
 };
 
-function getPresetRange(period) {
-  if (period === "all") {
-    return { startDate: "", endDate: "" };
-  }
-
-  const endDate = new Date();
-  const startDate = new Date(endDate);
-
-  if (period === "today") {
-    return {
-      startDate: formatDateInput(startDate),
-      endDate: formatDateInput(endDate),
-    };
-  }
-
-  startDate.setDate(endDate.getDate() - (Number(period) - 1));
-  return {
-    startDate: formatDateInput(startDate),
-    endDate: formatDateInput(endDate),
-  };
-}
-
-function toDateTime(value) {
-  if (!value) return null;
-  if (value instanceof Date) return value;
-
-  const rawValue = String(value);
-  if (rawValue.includes("T")) {
-    return new Date(rawValue);
-  }
-
-  const parsedDate = parseDateInput(rawValue);
-  return parsedDate ? new Date(parsedDate.getTime() + 12 * 60 * 60 * 1000) : null;
-}
-
-function isInDateRange(value, startDate, endDate) {
-  const dateValue = toDateTime(value);
-  if (!dateValue) return true;
-  if (startDate && dateValue < startDate) return false;
-  if (endDate && dateValue > endDate) return false;
-  return true;
-}
-
-function buildSearchText(values) {
-  return values
-    .flat()
-    .filter(Boolean)
-    .map((value) => String(value).toLowerCase())
-    .join(" ");
-}
-
-function formatPaymentMethod(value) {
-  const normalized = String(value || "").trim().toLowerCase();
-  return paymentMethodLabelMap[normalized] || normalized || "-";
-}
-
-function formatSignedCurrency(value) {
-  if (!value) return formatRupiah(0);
-  return value > 0 ? `+${formatRupiah(value)}` : `-${formatRupiah(Math.abs(value))}`;
-}
-
-function getOptionLabel(options, value) {
-  const option = options.find((entry) => entry.value === value || entry.key === value);
-  return option?.label || value;
-}
-
-function formatReportRangeLabel(startDate, endDate) {
-  if (!startDate && !endDate) {
-    return "Semua periode";
-  }
-
-  const singleDate = startDate || endDate;
-  if (!startDate || !endDate) {
-    return formatDateTime(singleDate, { dateStyle: "medium" });
-  }
-
-  const startLabel = formatDateTime(startDate, { dateStyle: "medium" });
-  const endLabel = formatDateTime(endDate, { dateStyle: "medium" });
-  return startLabel === endLabel ? startLabel : `${startLabel} s/d ${endLabel}`;
-}
-
-function getWalletFlow(transactionType) {
-  if (transactionType === "masuk") return "masuk";
-  if (transactionType === "keluar") return "keluar";
-  return "internal";
-}
-
 function handlePrintTransaction(transaction) {
   const printWindow = window.open("", "_blank", "width=420,height=760");
 
   if (!printWindow) {
-    showNotification("error", "Popup print diblokir browser. Izinkan popup lalu coba lagi.");
+    showNotification(
+      "warning",
+      "Jendela cetak diblokir browser. Izinkan popup, lalu tekan Cetak Struk lagi."
+    );
     return;
   }
 
-  printWindow.onload = () => {
-    printWindow.focus();
-    printWindow.print();
-  };
+  const didPrint = printTransactionReceipt(transaction, printWindow);
+  if (!didPrint) {
+    showNotification("error", "Struk gagal disiapkan. Coba cetak ulang dari riwayat transaksi.");
+    return;
+  }
 
-  printWindow.document.open();
-  printWindow.document.write(generateReceiptHTML(transaction));
-  printWindow.document.close();
-}
-
-function buildHistoryRows({
-  accessoryTransactions,
-  digitalTransactions,
-  logisticsTransactions,
-  walletTransactions,
-  cashEntries,
-  products,
-}) {
-  const productCostMap = new Map(
-    products.map((product) => [product.id, Number(product.harga_beli || 0)])
-  );
-
-  const accessoryRows = accessoryTransactions.map((transaction) => {
-    const items = Array.isArray(transaction.items) ? transaction.items : [];
-    const itemCount = items.reduce((sum, item) => sum + Number(item.qty || 0), 0);
-    const cost = items.reduce(
-      (sum, item) =>
-        sum + (productCostMap.get(item.produk_id) || 0) * Number(item.qty || 0),
-      0
-    );
-    const amount = Number(transaction.total_bayar || 0);
-    const profit = amount - cost;
-    const itemNames = items.map((item) => item.nama_produk).filter(Boolean);
-
-    return {
-      id: `aks-${transaction.id}`,
-      source: "aksesoris",
-      flow: "masuk",
-      occurredAt: transaction.created_at,
-      dateFilterValue: transaction.created_at,
-      reference: transaction.no_transaksi || `TRX-${transaction.id}`,
-      summary: itemNames[0] || "Penjualan aksesoris",
-      caption: `${itemCount} item - ${formatPaymentMethod(transaction.metode_bayar)}`,
-      amount,
-      secondaryAmount: cost,
-      secondaryLabel: "Modal estimasi",
-      incomeValue: amount,
-      expenseValue: 0,
-      internalValue: 0,
-      profitImpact: profit,
-      paymentMethod: String(transaction.metode_bayar || "").toLowerCase(),
-      note: transaction.catatan || "",
-      raw: transaction,
-      searchableText: buildSearchText([
-        transaction.no_transaksi,
-        transaction.catatan,
-        transaction.metode_bayar,
-        transaction.kasir_id,
-        itemNames,
-      ]),
-    };
-  });
-
-  const digitalRows = digitalTransactions.map((transaction) => {
-    const amount = Number(transaction.harga_jual || 0);
-    const modal = Number(transaction.modal || 0);
-    const profit =
-      typeof transaction.keuntungan === "number" ? transaction.keuntungan : amount - modal;
-
-    return {
-      id: `dig-${transaction.id}`,
-      source: "digital",
-      flow: "masuk",
-      occurredAt: transaction.created_at,
-      dateFilterValue: transaction.created_at,
-      reference: transaction.no_transaksi || `LYN-${transaction.id}`,
-      summary: serviceTypeLabelMap[transaction.jenis] || transaction.jenis || "Layanan digital",
-      caption: [transaction.provider, transaction.nomor_tujuan].filter(Boolean).join(" - ") || "-",
-      amount,
-      secondaryAmount: modal,
-      secondaryLabel: "Modal",
-      incomeValue: amount,
-      expenseValue: 0,
-      internalValue: 0,
-      profitImpact: profit,
-      paymentMethod: "",
-      note: transaction.catatan || "",
-      raw: transaction,
-      searchableText: buildSearchText([
-        transaction.no_transaksi,
-        serviceTypeLabelMap[transaction.jenis] || transaction.jenis,
-        transaction.provider,
-        transaction.nomor_tujuan,
-        transaction.nama_tujuan,
-        transaction.platform_sumber,
-        transaction.catatan,
-      ]),
-    };
-  });
-
-  const logisticsRows = logisticsTransactions.map((transaction) => {
-    const amount = Number(transaction.price || transaction.harga_jual || 0);
-    const modal = Number(transaction.modal || 0);
-    const profit =
-      typeof transaction.keuntungan === "number" ? transaction.keuntungan : amount - modal;
-    const courier = transaction.courier || transaction.ekspedisi || "Transaksi logistik";
-    const receiver = transaction.receiver || transaction.receiver_name || "";
-    const paymentMethod =
-      transaction.paymentMethod || transaction.payment_method || transaction.platform_sumber;
-
-    return {
-      id: `log-${transaction.id}`,
-      source: "logistik",
-      flow: "masuk",
-      occurredAt: transaction.created_at,
-      dateFilterValue: transaction.created_at,
-      reference: transaction.no_transaksi || `LOG-${transaction.id}`,
-      summary: courier,
-      caption: receiver ? `${receiver} - ${transaction.destination || "-"}` : transaction.destination || "-",
-      amount,
-      secondaryAmount: Number(transaction.weight || 0),
-      secondaryLabel: "Berat kg",
-      incomeValue: amount,
-      expenseValue: 0,
-      internalValue: 0,
-      profitImpact: profit,
-      paymentMethod: paymentMethod || "",
-      note: transaction.catatan || "",
-      raw: transaction,
-      searchableText: buildSearchText([
-        transaction.no_transaksi,
-        courier,
-        receiver,
-        transaction.destination,
-        transaction.packageType || transaction.package_type,
-        paymentMethod,
-        transaction.no_resi,
-        transaction.catatan,
-      ]),
-    };
-  });
-
-  const walletRows = walletTransactions.map((transaction) => {
-    const amount = Number(transaction.nominal || 0);
-    const fee = Number(transaction.biaya_admin || 0);
-    const platformLabel = walletPlatformLabelMap[transaction.platform] || transaction.platform;
-    const targetLabel = transaction.platform_tujuan
-      ? walletPlatformLabelMap[transaction.platform_tujuan] || transaction.platform_tujuan
-      : null;
-
-    return {
-      id: `wal-${transaction.id}`,
-      source: "saldo",
-      flow: getWalletFlow(transaction.jenis),
-      occurredAt: transaction.created_at,
-      dateFilterValue: transaction.created_at,
-      reference: `DOMPET-${String(transaction.id).slice(0, 8).toUpperCase()}`,
-      summary:
-        walletTransactionTypeLabelMap[transaction.jenis] || transaction.jenis || "Mutasi saldo",
-      caption: targetLabel ? `${platformLabel} -> ${targetLabel}` : platformLabel,
-      amount,
-      secondaryAmount: fee,
-      secondaryLabel: "Biaya admin",
-      incomeValue: 0,
-      expenseValue: fee,
-      internalValue: amount,
-      profitImpact: -fee,
-      paymentMethod: "",
-      note: transaction.keterangan || "",
-      raw: transaction,
-      searchableText: buildSearchText([
-        walletTransactionTypeLabelMap[transaction.jenis] || transaction.jenis,
-        platformLabel,
-        targetLabel,
-        transaction.keterangan,
-      ]),
-    };
-  });
-
-  const cashRows = cashEntries.map((entry) => {
-    const amount = Number(entry.nominal || 0);
-    const categoryLabel = cashCategoryLabelMap[entry.kategori] || entry.kategori || "Kas";
-
-    return {
-      id: `kas-${entry.id}`,
-      source: "operasional",
-      flow: entry.jenis === "pemasukan" ? "masuk" : "keluar",
-      occurredAt: entry.created_at || entry.tanggal,
-      dateFilterValue: entry.tanggal || entry.created_at,
-      reference: `KAS-${entry.tanggal || String(entry.id).slice(0, 8)}`,
-      summary: categoryLabel,
-      caption: entry.keterangan || entry.jenis || "-",
-      amount,
-      secondaryAmount: amount,
-      secondaryLabel:
-        entry.jenis === "pemasukan" ? "Masuk ke kas" : "Keluar dari kas",
-      incomeValue: entry.jenis === "pemasukan" ? amount : 0,
-      expenseValue: entry.jenis === "pengeluaran" ? amount : 0,
-      internalValue: 0,
-      profitImpact: entry.jenis === "pengeluaran" ? -amount : 0,
-      paymentMethod: "",
-      note: entry.keterangan || "",
-      raw: entry,
-      searchableText: buildSearchText([
-        categoryLabel,
-        entry.jenis,
-        entry.keterangan,
-        entry.tanggal,
-      ]),
-    };
-  });
-
-  return [
-    ...accessoryRows,
-    ...digitalRows,
-    ...logisticsRows,
-    ...walletRows,
-    ...cashRows,
-  ].sort((left, right) => new Date(right.occurredAt) - new Date(left.occurredAt));
+  showNotification("success", "Jendela cetak struk sudah dibuka.");
 }
 
 function SourceBadge({ source }) {
@@ -450,7 +163,7 @@ function DetailMetric({ label, value, accent = "default" }) {
         : "border-slate-200 bg-slate-50";
 
   return (
-    <div className={`rounded-[24px] border px-4 py-4 ${accentClass}`}>
+    <div className={`rounded-lg border px-4 py-4 ${accentClass}`}>
       <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
         {label}
       </p>
@@ -461,7 +174,7 @@ function DetailMetric({ label, value, accent = "default" }) {
 
 function DetailItem({ label, value }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+    <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
       <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
         {label}
       </p>
@@ -473,7 +186,7 @@ function DetailItem({ label, value }) {
 function renderSelectedTransactionDetail(row) {
   if (!row) {
     return (
-      <div className="rounded-[28px] border border-dashed border-slate-200 bg-slate-50 px-4 py-12 text-center text-sm text-slate-500">
+      <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-12 text-center text-sm text-slate-500">
         Pilih salah satu transaksi di tabel untuk melihat detail lengkapnya di sini.
       </div>
     );
@@ -492,7 +205,7 @@ function renderSelectedTransactionDetail(row) {
           <DetailItem label="Kembalian" value={formatRupiah(row.raw.kembalian)} />
         </div>
 
-        <div className="mt-5 rounded-[28px] border border-slate-200 bg-white p-5">
+        <div className="mt-5 rounded-lg border border-slate-200 bg-white p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
@@ -500,25 +213,27 @@ function renderSelectedTransactionDetail(row) {
               </p>
               <p className="mt-2 text-lg font-bold text-slate-950">{totalQty} item terjual</p>
             </div>
-            <button
-              type="button"
-              onClick={() => handlePrintTransaction(row.raw)}
-              className="brand-button-primary"
-            >
-              Cetak Struk
-            </button>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => handlePrintTransaction(row.raw)}
+                className="brand-button-primary"
+              >
+                Cetak Struk
+              </button>
+            </div>
           </div>
 
           <div className="mt-5 space-y-3">
             {items.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
                 Detail item transaksi ini belum tersedia.
               </div>
             ) : (
               items.map((item) => (
                 <div
                   key={item.id}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
+                  className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-4"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
@@ -541,10 +256,7 @@ function renderSelectedTransactionDetail(row) {
   if (row.source === "digital") {
     return (
       <div className="grid gap-3 sm:grid-cols-2">
-        <DetailItem
-          label="Jenis layanan"
-          value={serviceTypeLabelMap[row.raw.jenis] || row.raw.jenis || "-"}
-        />
+        <DetailItem label="Jenis layanan" value={row.raw.jenis || "-"} />
         <DetailItem label="Provider" value={row.raw.provider || "-"} />
         <DetailItem label="Nomor tujuan" value={row.raw.nomor_tujuan || "-"} />
         <DetailItem label="Nama tujuan" value={row.raw.nama_tujuan || "-"} />
@@ -625,15 +337,28 @@ function renderSelectedTransactionDetail(row) {
 }
 
 export default function RiwayatTransaksiPage() {
+  const { user } = useAuth();
   const {
-    loading,
-    products,
     accessoryTransactions,
     digitalTransactions,
-    walletTransactions,
+    deletedTransactions,
     logisticsTransactions,
     cashEntries,
-  } = useData();
+    deleteTransactionHistory,
+    restoreTransactionHistory,
+    permanentlyDeleteTransactionHistory,
+    purgeExpiredDeletedTransactions,
+  } = useTransactions();
+  const { products } = useProducts();
+  const { staffUsers } = useShift();
+  const { walletTransactions } = useWallet();
+  const {
+    isPinModalOpen,
+    closePinModal,
+    executeSensitiveAction,
+    executeConfirmedAction,
+    actionDescription,
+  } = usePinConfirmation();
   const [searchTerm, setSearchTerm] = useState("");
   const [sourceFilter, setSourceFilter] = useState("semua");
   const [flowFilter, setFlowFilter] = useState("semua");
@@ -641,6 +366,16 @@ export default function RiwayatTransaksiPage() {
   const [period, setPeriod] = useState("30");
   const [dateRange, setDateRange] = useState(() => getPresetRange("30"));
   const [selectedId, setSelectedId] = useState(null);
+  const [pendingAction, setPendingAction] = useState(null);
+  const [processingCleanup, setProcessingCleanup] = useState(false);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [deletedPage, setDeletedPage] = useState(1);
+  const canManageTransactionHistory = user?.role === "pemilik";
+
+  const userNameById = useMemo(
+    () => new Map((staffUsers || []).map((staff) => [staff.id, staff.nama])),
+    [staffUsers]
+  );
 
   const paymentOptions = useMemo(() => {
     const values = new Set(
@@ -687,6 +422,39 @@ export default function RiwayatTransaksiPage() {
       endDate: endDate ? new Date(endDate.getTime() + 86399999) : null,
     };
   }, [endDate, startDate]);
+  const historyQueryRange = useMemo(
+    () => ({
+      startDate: normalizedRange.startDate ? formatDateInput(normalizedRange.startDate) : "",
+      endDate: normalizedRange.endDate ? formatDateInput(normalizedRange.endDate) : "",
+    }),
+    [normalizedRange.endDate, normalizedRange.startDate]
+  );
+  const rawHistoryRows = useMemo(
+    () => ({
+      accessoryTransactions,
+      digitalTransactions,
+      logisticsTransactions,
+      walletTransactions,
+      cashEntries,
+    }),
+    [
+      accessoryTransactions,
+      cashEntries,
+      digitalTransactions,
+      logisticsTransactions,
+      walletTransactions,
+    ]
+  );
+  const serverHistoryPage = usePagedTransactionHistoryRows({
+    search: searchTerm,
+    sourceFilter,
+    flowFilter,
+    paymentFilter,
+    dateRange: historyQueryRange,
+    rawRows: rawHistoryRows,
+    pageSize: HISTORY_PAGE_SIZE,
+  });
+  const usingServerHistory = !serverHistoryPage.error;
 
   const reportRangeLabel = useMemo(
     () => formatReportRangeLabel(normalizedRange.startDate, normalizedRange.endDate),
@@ -694,23 +462,41 @@ export default function RiwayatTransaksiPage() {
   );
 
   const allRows = useMemo(
-    () =>
-      buildHistoryRows({
+    () => {
+      if (usingServerHistory) return [];
+
+      return buildHistoryRows({
         accessoryTransactions,
         digitalTransactions,
         logisticsTransactions,
         walletTransactions,
         cashEntries,
         products,
-      }),
+      });
+    },
     [
       accessoryTransactions,
       cashEntries,
       digitalTransactions,
       logisticsTransactions,
       products,
+      usingServerHistory,
       walletTransactions,
     ]
+  );
+
+  const deletedRows = useMemo(
+    () => buildDeletedHistoryRows(deletedTransactions || [], products),
+    [deletedTransactions, products]
+  );
+
+  const deletedStats = useMemo(
+    () => ({
+      total: deletedRows.length,
+      expiringSoon: deletedRows.filter((row) => getDaysLeft(row.deletedAt) <= 7).length,
+      expired: deletedRows.filter((row) => getDaysLeft(row.deletedAt) === 0).length,
+    }),
+    [deletedRows]
   );
 
   const filteredRows = useMemo(() => {
@@ -739,10 +525,62 @@ export default function RiwayatTransaksiPage() {
     searchTerm,
     sourceFilter,
   ]);
+  const historyPageCount = Math.max(1, Math.ceil(filteredRows.length / HISTORY_PAGE_SIZE));
+  const paginatedRows = useMemo(() => {
+    const start = (historyPage - 1) * HISTORY_PAGE_SIZE;
+    return filteredRows.slice(start, start + HISTORY_PAGE_SIZE);
+  }, [filteredRows, historyPage]);
+  const displayedRows = usingServerHistory ? serverHistoryPage.rows : paginatedRows;
+  const displayedHistoryPage = usingServerHistory ? serverHistoryPage.page : historyPage;
+  const displayedHistoryPageCount = usingServerHistory
+    ? serverHistoryPage.pageCount
+    : historyPageCount;
+  const displayedHistoryFrom = usingServerHistory
+    ? serverHistoryPage.from
+    : filteredRows.length
+      ? (historyPage - 1) * HISTORY_PAGE_SIZE + 1
+      : 0;
+  const displayedHistoryTo = usingServerHistory
+    ? serverHistoryPage.to
+    : Math.min(historyPage * HISTORY_PAGE_SIZE, filteredRows.length);
+  const displayedHistoryCount = usingServerHistory
+    ? serverHistoryPage.count
+    : filteredRows.length;
+  const setDisplayedHistoryPage = usingServerHistory ? serverHistoryPage.setPage : setHistoryPage;
+  const deletedPageCount = Math.max(1, Math.ceil(deletedRows.length / DELETED_PAGE_SIZE));
+  const paginatedDeletedRows = useMemo(() => {
+    const start = (deletedPage - 1) * DELETED_PAGE_SIZE;
+    return deletedRows.slice(start, start + DELETED_PAGE_SIZE);
+  }, [deletedPage, deletedRows]);
 
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [
+    dateRange.endDate,
+    dateRange.startDate,
+    flowFilter,
+    paymentFilter,
+    period,
+    searchTerm,
+    sourceFilter,
+  ]);
+
+  useEffect(() => {
+    if (historyPage > historyPageCount) {
+      setHistoryPage(historyPageCount);
+    }
+  }, [historyPage, historyPageCount]);
+
+  useEffect(() => {
+    if (deletedPage > deletedPageCount) {
+      setDeletedPage(deletedPageCount);
+    }
+  }, [deletedPage, deletedPageCount]);
+
+  const summaryRows = usingServerHistory ? displayedRows : filteredRows;
   const summary = useMemo(
     () =>
-      filteredRows.reduce(
+      summaryRows.reduce(
         (acc, row) => {
           acc.total += 1;
           acc.income += row.incomeValue;
@@ -761,74 +599,142 @@ export default function RiwayatTransaksiPage() {
           bySource: {},
         }
       ),
-    [filteredRows]
+    [summaryRows]
   );
 
-  const handleExportTransactions = () => {
-    if (!filteredRows.length) {
+  const handleExportTransactions = async () => {
+    const exportRows = usingServerHistory ? displayedRows : filteredRows;
+
+    if (!exportRows.length) {
       showNotification("warning", "Tidak ada transaksi yang bisa diekspor untuk filter ini.");
       return;
     }
 
     try {
-      const fileName = exportExcel(
-        filteredRows.map((row) => ({
+      const { exportExcel } = await import("../utils/transactionExport");
+      const fileName = await exportExcel(
+          exportRows.map((row) => ({
+          noTransaksi: row.reference,
           date: formatDateTime(row.occurredAt, { dateStyle: "medium" }),
-          time: formatDateTime(row.occurredAt, { timeStyle: "short" }),
-          channel: sourceAppearance[row.source]?.label || row.source,
-          flow: flowAppearance[row.flow]?.label || row.flow,
-          reference: row.reference,
+          cashier: row.raw?.kasir_id || row.raw?.cashier || row.raw?.kasir_id,
           summary: row.summary,
-          detail: row.caption,
+          product: row.summary,
+          qty: row.raw?.items?.length
+            ? row.raw.items.reduce((sum, item) => sum + Number(item.qty || 0), 0)
+            : 1,
+          price:
+            row.raw?.items?.length === 1
+              ? row.raw.items[0].harga_satuan
+              : row.amount,
+          payments: row.raw?.payments || [],
           paymentMethod: row.paymentMethod ? formatPaymentMethod(row.paymentMethod) : "-",
           amount: row.amount,
-          secondaryLabel: row.secondaryLabel,
-          secondaryAmount: row.secondaryAmount,
-          profitImpact: row.profitImpact,
-          note: row.note || "-",
         })),
         {
-          title: "Laporan Transaksi POS Raja Aksesoris",
-          sheetName: "Riwayat Transaksi",
           reportRange: reportRangeLabel,
-          filterSummary: [
-            `Pencarian: ${searchTerm.trim() || "Semua"}`,
-            `Channel: ${getOptionLabel(SOURCE_OPTIONS, sourceFilter)}`,
-            `Arus: ${getOptionLabel(FLOW_OPTIONS, flowFilter)}`,
-            `Metode bayar: ${getOptionLabel(paymentOptions, paymentFilter)}`,
-          ].join(" | "),
           fileName: `Laporan_Transaksi_POS_${formatDateInput(new Date())}.xlsx`,
         }
       );
 
       showNotification(
         "success",
-        `${filteredRows.length} transaksi berhasil diekspor ke file ${fileName}.`
+        `${exportRows.length} transaksi berhasil diekspor ke file ${fileName}.`
       );
     } catch (error) {
       showNotification("error", error.message || "Gagal mengekspor transaksi ke Excel.");
     }
   };
 
+  const getDeletedBy = (row) => {
+    if (!row?.deletedBy) return "-";
+    return userNameById.get(row.deletedBy) || formatCashierName(row.deletedBy);
+  };
+
+  const confirmTransactionAction = async () => {
+    if (!pendingAction) return;
+
+    const { type, row } = pendingAction;
+    const transactionLabel = row.reference || row.summary || "Transaksi";
+
+    try {
+      await executeSensitiveAction(
+        async () => {
+          if (type === "delete") {
+            await deleteTransactionHistory({
+              source: row.source,
+              id: row.raw.id,
+              reason: `Void dari halaman riwayat: ${transactionLabel}`,
+            });
+            if (selectedId === row.id) {
+              setSelectedId(null);
+            }
+          } else if (type === "restore") {
+            await restoreTransactionHistory({ source: row.source, id: row.raw.id });
+          } else {
+            await permanentlyDeleteTransactionHistory({ source: row.source, id: row.raw.id });
+          }
+        },
+        type === "delete"
+          ? "TRANSACTION.DELETE"
+          : type === "restore"
+            ? "TRANSACTION.RESTORE"
+            : "TRANSACTION.PERMANENT_DELETE"
+      );
+
+      showNotification(
+        "success",
+        type === "delete"
+          ? `${transactionLabel} berhasil di-void. Reversal stok/wallet dicatat otomatis.`
+          : type === "restore"
+            ? `${transactionLabel} berhasil direstore ke riwayat aktif.`
+            : `${transactionLabel} dihapus permanen.`
+      );
+      setPendingAction(null);
+    } catch (error) {
+      if (isPinActionCancelledError(error)) return;
+      showNotification("error", error.message || "Aksi riwayat transaksi gagal.");
+    }
+  };
+
+  const runDeletedTransactionCleanup = async () => {
+    setProcessingCleanup(true);
+    try {
+      const deletedCount = await executeSensitiveAction(
+        async () => await purgeExpiredDeletedTransactions(),
+        "TRANSACTION.PERMANENT_DELETE"
+      );
+      showNotification(
+        "success",
+        deletedCount
+          ? `${deletedCount} transaksi lama dibersihkan.`
+          : "Hard delete transaksi production dimatikan. Transaksi void tetap menjadi arsip audit."
+      );
+    } catch (error) {
+      if (isPinActionCancelledError(error)) return;
+      showNotification("error", error.message || "Gagal membersihkan riwayat terhapus.");
+    } finally {
+      setProcessingCleanup(false);
+    }
+  };
+
   const selectedRow = useMemo(
-    () => filteredRows.find((row) => row.id === selectedId) || null,
-    [filteredRows, selectedId]
+    () =>
+      displayedRows.find((row) => row.id === selectedId) ||
+      filteredRows.find((row) => row.id === selectedId) ||
+      null,
+    [displayedRows, filteredRows, selectedId]
   );
 
   useEffect(() => {
-    if (!filteredRows.length) {
+    if (!displayedRows.length) {
       setSelectedId(null);
       return;
     }
 
-    if (!filteredRows.some((row) => row.id === selectedId)) {
-      setSelectedId(filteredRows[0].id);
+    if (![...displayedRows, ...filteredRows].some((row) => row.id === selectedId)) {
+      setSelectedId(displayedRows[0].id);
     }
-  }, [filteredRows, selectedId]);
-
-  if (loading) {
-    return <div className="brand-panel px-6 py-10 text-slate-700">Memuat riwayat transaksi...</div>;
-  }
+  }, [displayedRows, filteredRows, selectedId]);
 
   return (
     <div className="space-y-6">
@@ -994,7 +900,59 @@ export default function RiwayatTransaksiPage() {
             </p>
           </div>
 
-          <div className="brand-scrollbar overflow-x-auto">
+          <div className="space-y-3 p-4 md:hidden">
+            {displayedRows.length === 0 ? (
+              <div className="brand-empty-state py-8 text-sm text-slate-500">
+                Tidak ada transaksi yang cocok dengan filter aktif.
+              </div>
+            ) : (
+              displayedRows.map((row) => (
+                <article
+                  key={`mobile-${row.id}`}
+                  className={`rounded-lg border p-4 ${
+                    selectedId === row.id
+                      ? "border-[var(--brand-gold)] bg-[var(--brand-surface-tint)]"
+                      : "border-[var(--border-muted)] bg-[var(--surface)]"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-wrap gap-2">
+                      <SourceBadge source={row.source} />
+                      <FlowBadge flow={row.flow} />
+                    </div>
+                    <p className="text-right text-sm font-bold text-slate-950">
+                      {formatRupiah(row.amount)}
+                    </p>
+                  </div>
+                  <p className="mt-3 text-sm font-bold text-slate-950">{row.reference}</p>
+                  <p className="mt-1 line-clamp-2 text-sm text-slate-600">{row.summary}</p>
+                  <p className="mt-2 text-xs font-semibold text-slate-500">
+                    {formatDateTime(row.occurredAt, { dateStyle: "medium", timeStyle: "short" })}
+                  </p>
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(row.id)}
+                      className="brand-button-secondary flex-1"
+                    >
+                      Detail
+                    </button>
+                    {canManageTransactionHistory ? (
+                      <button
+                        type="button"
+                        onClick={() => setPendingAction({ type: "delete", row })}
+                        className="brand-button-danger flex-1"
+                      >
+                        Void
+                      </button>
+                    ) : null}
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+
+          <div className="brand-scrollbar hidden overflow-x-auto md:block">
             <table className="brand-table">
               <thead>
                 <tr>
@@ -1003,18 +961,18 @@ export default function RiwayatTransaksiPage() {
                   <th>Ringkasan</th>
                   <th className="text-right">Nominal</th>
                   <th className="text-right">Dampak laba</th>
-                  <th className="text-right">Aksi</th>
+                  <th className="brand-table-action-cell text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.length === 0 ? (
+                {displayedRows.length === 0 ? (
                   <tr>
                     <td colSpan="6" className="px-6 py-14 text-center text-slate-500">
                       Tidak ada transaksi yang cocok dengan filter aktif.
                     </td>
                   </tr>
                 ) : (
-                  filteredRows.map((row) => {
+                  displayedRows.map((row) => {
                     const isActive = selectedId === row.id;
 
                     return (
@@ -1062,8 +1020,8 @@ export default function RiwayatTransaksiPage() {
                         >
                           {formatSignedCurrency(row.profitImpact)}
                         </td>
-                        <td>
-                          <div className="flex justify-end">
+                        <td className="brand-table-action-cell">
+                          <div className="flex flex-wrap justify-end gap-2">
                             <button
                               type="button"
                               onClick={(event) => {
@@ -1074,6 +1032,18 @@ export default function RiwayatTransaksiPage() {
                             >
                               {isActive ? "Dipilih" : "Detail"}
                             </button>
+                            {canManageTransactionHistory ? (
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setPendingAction({ type: "delete", row });
+                                }}
+                                className="brand-button-danger min-h-[40px] px-3 py-2"
+                              >
+                                Void
+                              </button>
+                            ) : null}
                           </div>
                         </td>
                       </tr>
@@ -1083,6 +1053,14 @@ export default function RiwayatTransaksiPage() {
               </tbody>
             </table>
           </div>
+          <PaginationBar
+            page={displayedHistoryPage}
+            pageCount={displayedHistoryPageCount}
+            from={displayedHistoryFrom}
+            to={displayedHistoryTo}
+            count={displayedHistoryCount}
+            onPageChange={setDisplayedHistoryPage}
+          />
         </Panel>
 
         <Panel variant="strong" className="p-6 xl:sticky xl:top-6 xl:self-start">
@@ -1149,7 +1127,7 @@ export default function RiwayatTransaksiPage() {
               </div>
 
               {selectedRow.note ? (
-                <div className="mt-5 rounded-[28px] border border-slate-200 bg-white px-4 py-4">
+                <div className="mt-5 rounded-lg border border-slate-200 bg-white px-4 py-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
                     Catatan
                   </p>
@@ -1162,6 +1140,213 @@ export default function RiwayatTransaksiPage() {
           )}
         </Panel>
       </div>
+
+      {canManageTransactionHistory ? (
+        <>
+          <div className="grid gap-4 md:grid-cols-3">
+            <MetricCard
+              label="Transaksi void"
+              value={String(deletedStats.total)}
+              helper="Arsip audit transaksi yang dibatalkan."
+            />
+            <MetricCard
+              label="Perlu review"
+              value={String(deletedStats.expiringSoon)}
+              helper="Void terbaru yang perlu dicek owner."
+              accent="gold"
+            />
+            <MetricCard
+              label="Audit terkunci"
+              value={String(deletedStats.expired)}
+              helper="Hard delete production tidak tersedia."
+              accent="danger"
+            />
+          </div>
+
+          <Panel className="overflow-hidden p-0">
+            <div className="flex flex-col gap-4 border-b border-slate-200 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--brand-gold)]">
+                  Void ledger transaksi
+                </p>
+                <h3 className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-950">
+                  Transaksi void
+                </h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  Transaksi yang dibatalkan tetap tersimpan sebagai audit trail dan reversal operasional.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={runDeletedTransactionCleanup}
+                disabled={processingCleanup}
+                className="brand-button-secondary disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {processingCleanup ? "Mengecek..." : "Cek hard-delete"}
+              </button>
+            </div>
+
+            <div className="brand-scrollbar overflow-x-auto">
+              <table className="brand-table">
+                <thead>
+                  <tr>
+                    <th>Tanggal void</th>
+                    <th>Channel</th>
+                    <th>Transaksi</th>
+                    <th className="text-right">Nominal</th>
+                    <th>Diproses oleh</th>
+                    <th>Status audit</th>
+                    <th className="text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {deletedRows.length ? (
+                    paginatedDeletedRows.map((row) => {
+                      const daysLeft = getDaysLeft(row.deletedAt);
+
+                      return (
+                        <tr key={row.id}>
+                          <td className="text-slate-600">
+                            {row.deletedAt
+                              ? formatDateTime(row.deletedAt, {
+                                  dateStyle: "medium",
+                                  timeStyle: "short",
+                                })
+                              : "-"}
+                          </td>
+                          <td>
+                            <div className="flex flex-col gap-2">
+                              <SourceBadge source={row.source} />
+                              <FlowBadge flow={row.flow} />
+                            </div>
+                          </td>
+                          <td>
+                            <p className="font-semibold text-slate-950">{row.reference}</p>
+                            <p className="mt-1 text-sm text-slate-700">{row.summary}</p>
+                            <p className="mt-1 text-xs text-slate-500">{row.caption}</p>
+                          </td>
+                          <td className="text-right font-semibold text-slate-950">
+                            {formatRupiah(row.amount)}
+                          </td>
+                          <td className="text-slate-600">{getDeletedBy(row)}</td>
+                          <td>
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                                daysLeft <= 7
+                                  ? "bg-[var(--brand-gold)]/18 text-[var(--brand-gold)]"
+                                  : "bg-emerald-100 text-emerald-700"
+                              }`}
+                            >
+                              Void terkunci
+                            </span>
+                          </td>
+                          <td>
+                            <div className="flex flex-wrap justify-end gap-2">
+                              <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600">
+                                Reversal audit
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan="7" className="px-6 py-14 text-center text-slate-500">
+                        Belum ada transaksi void. Riwayat aktif masih utuh.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <PaginationBar
+              page={deletedPage}
+              pageCount={deletedPageCount}
+              from={deletedRows.length ? (deletedPage - 1) * DELETED_PAGE_SIZE + 1 : 0}
+              to={Math.min(deletedPage * DELETED_PAGE_SIZE, deletedRows.length)}
+              count={deletedRows.length}
+              onPageChange={setDeletedPage}
+            />
+          </Panel>
+        </>
+      ) : null}
+
+      {pendingAction ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/45 px-4 py-6">
+          <div className="brand-panel brand-modal-sm brand-modal-destructive p-6 shadow-2xl" role="dialog" aria-modal="true">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--brand-gold)]">
+              Konfirmasi transaksi
+            </p>
+            <h2 className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-950">
+              {pendingAction.type === "delete"
+                ? "Void transaksi?"
+                : pendingAction.type === "restore"
+                  ? "Restore transaksi?"
+                  : "Hapus permanen?"}
+            </h2>
+            <div className="mt-4 rounded-lg border border-[var(--border-muted)] bg-[var(--surface-secondary)] px-4 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Target</p>
+              <p className="mt-1 break-words text-sm font-bold text-slate-950">
+                {pendingAction.row.reference || pendingAction.row.raw?.id}
+              </p>
+            </div>
+            <div className="brand-modal-consequence mt-3">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em]">Konsekuensi</p>
+              <p className="mt-1">
+                {pendingAction.type === "delete"
+                  ? "Transaksi dibatalkan dengan reversal stok/wallet, sementara audit tetap immutable."
+                  : pendingAction.type === "restore"
+                    ? "Transaksi kembali muncul di riwayat aktif."
+                    : "Transaksi dihapus permanen dan tidak dapat direstore."}
+              </p>
+            </div>
+            <p className="mt-3 text-sm font-semibold text-[var(--warning)]">
+              Verifikasi PIN pemilik diwajibkan sebelum perubahan disimpan.
+            </p>
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setPendingAction(null)}
+                className="brand-button-secondary"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={confirmTransactionAction}
+                className={
+                  pendingAction.type === "restore"
+                    ? "brand-button-success"
+                    : "brand-button-danger"
+                }
+              >
+                {pendingAction.type === "delete"
+                  ? "Void"
+                  : pendingAction.type === "restore"
+                    ? "Restore"
+                    : "Hapus permanen"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <PinConfirmationModal
+        isOpen={isPinModalOpen}
+        onClose={closePinModal}
+        onConfirm={async () => {
+          try {
+            await executeConfirmedAction();
+          } catch (error) {
+            if (isPinActionCancelledError(error)) return;
+            showNotification("error", error.message || "Verifikasi PIN gagal.");
+          }
+        }}
+        title="Konfirmasi PIN"
+        message={`Masukkan PIN untuk lanjut: ${actionDescription}`}
+      />
     </div>
   );
 }
+

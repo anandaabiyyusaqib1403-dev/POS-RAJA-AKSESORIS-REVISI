@@ -1,1 +1,108 @@
-import { Router } from 'express';\nimport { body, validationResult } from 'express-validator';\n\nconst router = Router();\n\n// Middleware to get DB pool\nrouter.use((req, res, next) => {\n  const pool = req.app.get('dbPool');\n  if (!pool) return res.status(500).json({ error: 'DB not initialized' });\n  req.db = pool;\n  next();\n});\n\n// GET /api/products - Get all products\nrouter.get('/', async (req, res) => {\n  try {\n    const [rows] = await req.db.execute(\n      'SELECT * FROM products ORDER BY name ASC'\n    );\n    res.json(rows);\n  } catch (err) {\n    res.status(500).json({ error: err.message });\n  }\n});\n\n// GET /api/products/:id\nrouter.get('/:id', async (req, res) => {\n  try {\n    const [rows] = await req.db.execute(\n      'SELECT * FROM products WHERE id = ?',\n      [req.params.id]\n    );\n    if (rows.length === 0) return res.status(404).json({ error: 'Product not found' });\n    res.json(rows[0]);\n  } catch (err) {\n    res.status(500).json({ error: err.message });\n  }\n});\n\n// POST /api/products - Create product\nrouter.post('/',\n  body('name').isLength({ min: 1 }).trim().escape(),\n  body('category').isLength({ min: 1 }).trim().escape(),\n  body('price').isFloat({ min: 0 }),\n  body('modal').optional().isFloat({ min: 0 }),\n  body('stock').optional().isInt({ min: 0 }),\n  async (req, res) => {\n    const errors = validationResult(req);\n    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });\n\n    try {\n      const { name, category, price, modal = 0, stock = 0 } = req.body;\n      const [result] = await req.db.execute(\n        'INSERT INTO products (name, category, price, modal, stock) VALUES (?, ?, ?, ?, ?)',\n        [name, category, price, modal, stock]\n      );\n      const [newProduct] = await req.db.execute('SELECT * FROM products WHERE id = ?', [result.insertId]);\n      res.status(201).json(newProduct[0]);\n    } catch (err) {\n      res.status(500).json({ error: err.message });\n    }\n  }\n);\n\n// PATCH /api/products/:id - Update\nrouter.patch('/:id',\n  body('name').optional().isLength({ min: 1 }).trim().escape(),\n  body('category').optional().isLength({ min: 1 }).trim().escape(),\n  body('price').optional().isFloat({ min: 0 }),\n  body('modal').optional().isFloat({ min: 0 }),\n  body('stock').optional().isInt({ min: 0 }),\n  async (req, res) => {\n    const errors = validationResult(req);\n    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });\n\n    try {\n      const updates = [];\n      const params = [];\n      ['name', 'category', 'price', 'modal', 'stock'].forEach(field => {\n        if (req.body[field] !== undefined) {\n          updates.push(`${field} = ?`);\n          params.push(req.body[field]);\n        }\n      });\n      if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });\n\n      params.push(req.params.id);\n      await req.db.execute(`UPDATE products SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, params);\n      const [updated] = await req.db.execute('SELECT * FROM products WHERE id = ?', [req.params.id]);\n      res.json(updated[0]);\n    } catch (err) {\n      res.status(500).json({ error: err.message });\n    }\n  }\n);\n\n// DELETE /api/products/:id\nrouter.delete('/:id', async (req, res) => {\n  try {\n    const [result] = await req.db.execute('DELETE FROM products WHERE id = ?', [req.params.id]);\n    if (result.affectedRows === 0) return res.status(404).json({ error: 'Product not found' });\n    res.json({ message: 'Product deleted' });\n  } catch (err) {\n    res.status(500).json({ error: err.message });\n  }\n});\n\nexport default router;\n
+import { Router } from 'express';
+import { body, validationResult } from 'express-validator';
+
+const router = Router();
+
+// Middleware to get DB pool
+router.use((req, res, next) => {
+  const pool = req.app.get('dbPool');
+  if (!pool) return res.status(500).json({ error: 'DB not initialized' });
+  req.db = pool;
+  next();
+});
+
+// GET /api/products - Get all products
+router.get('/', async (req, res) => {
+  try {
+    const [rows] = await req.db.execute(
+      'SELECT * FROM products ORDER BY name ASC'
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/products/:id
+router.get('/:id', async (req, res) => {
+  try {
+    const [rows] = await req.db.execute(
+      'SELECT * FROM products WHERE id = ?',
+      [req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Product not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/products - Create product
+router.post('/',
+  body('name').isLength({ min: 1 }).trim().escape(),
+  body('category').isLength({ min: 1 }).trim().escape(),
+  body('price').isFloat({ min: 0 }),
+  body('modal').optional().isFloat({ min: 0 }),
+  body('stock').optional().isInt({ min: 0 }),
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    try {
+      const { name, category, price, modal = 0, stock = 0 } = req.body;
+      const [result] = await req.db.execute(
+        'INSERT INTO products (name, category, price, modal, stock) VALUES (?, ?, ?, ?, ?)',
+        [name, category, price, modal, stock]
+      );
+      const [newProduct] = await req.db.execute('SELECT * FROM products WHERE id = ?', [result.insertId]);
+      res.status(201).json(newProduct[0]);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// PATCH /api/products/:id - Update
+router.patch('/:id',
+  body('name').optional().isLength({ min: 1 }).trim().escape(),
+  body('category').optional().isLength({ min: 1 }).trim().escape(),
+  body('price').optional().isFloat({ min: 0 }),
+  body('modal').optional().isFloat({ min: 0 }),
+  body('stock').optional().isInt({ min: 0 }),
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    try {
+      const updates = [];
+      const params = [];
+      ['name', 'category', 'price', 'modal', 'stock'].forEach(field => {
+        if (req.body[field] !== undefined) {
+          updates.push(`${field} = ?`);
+          params.push(req.body[field]);
+        }
+      });
+      if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
+
+      params.push(req.params.id);
+      await req.db.execute(`UPDATE products SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, params);
+      const [updated] = await req.db.execute('SELECT * FROM products WHERE id = ?', [req.params.id]);
+      res.json(updated[0]);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// DELETE /api/products/:id
+router.delete('/:id', async (req, res) => {
+  try {
+    const [result] = await req.db.execute('DELETE FROM products WHERE id = ?', [req.params.id]);
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Product not found' });
+    res.json({ message: 'Product deleted' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+export default router;

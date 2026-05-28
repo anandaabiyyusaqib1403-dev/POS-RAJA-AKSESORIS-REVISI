@@ -1,23 +1,22 @@
 import { useMemo, useState } from "react";
+import FeatureLoadPanel from "../components/FeatureLoadPanel";
 import MetricCard from "../components/app/MetricCard";
 import PageHeader from "../components/app/PageHeader";
 import Panel from "../components/app/Panel";
-import { useData } from "../contexts/DataContext";
+import { useReports } from "../hooks/useReports";
+import { useDailySalesSummary } from "../hooks/useDailySalesSummary";
+import { useFirstPaintReady } from "../hooks/useFirstPaintReady";
 import {
   cashCategoryLabelMap,
-  serviceTypeLabelMap,
   walletPlatformLabelMap,
 } from "../data/businessOptions";
 import { formatCashierName } from "../utils/cashier";
-import { exportFinancialReport } from "../utils/exportFinancialReport";
 import {
   formatDateInput,
   formatDateTime,
   formatRupiah,
   parseDateInput,
 } from "../utils/format";
-
-const DEBT_STORAGE_KEY = "raja-debts-records-v1";
 
 function getRange(period, customRange) {
   const today = new Date();
@@ -50,7 +49,7 @@ function formatRangeLabel(range) {
     : "-";
   const endLabel = range.endDate ? formatDateTime(range.endDate, { dateStyle: "medium" }) : "-";
 
-  return startLabel === endLabel ? startLabel : `${startLabel} s/d ${endLabel}`;
+  return `${startLabel} - ${endLabel}`;
 }
 
 function normalizeNumber(value) {
@@ -62,25 +61,6 @@ function parseReportDate(value) {
   if (!value) return new Date();
   const text = String(value);
   return new Date(text.includes("T") ? text : `${text}T12:00:00`);
-}
-
-function startOfDay(value) {
-  const date = new Date(value);
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
-
-function endOfDay(value) {
-  const date = new Date(value);
-  date.setHours(23, 59, 59, 999);
-  return date;
-}
-
-function isWithinRange(value, range) {
-  const date = parseReportDate(value);
-  if (range.startDate && date < startOfDay(range.startDate)) return false;
-  if (range.endDate && date > endOfDay(range.endDate)) return false;
-  return true;
 }
 
 function formatReportDateTime(value) {
@@ -117,8 +97,7 @@ function formatCompactAmount(value) {
 }
 
 function buildDigitalProductName(transaction) {
-  const serviceLabel =
-    serviceTypeLabelMap[transaction.jenis] || transaction.jenis || "Layanan digital";
+  const serviceLabel = transaction.jenis || "Layanan digital";
 
   return [
     serviceLabel,
@@ -128,40 +107,6 @@ function buildDigitalProductName(transaction) {
   ]
     .filter(Boolean)
     .join(" - ");
-}
-
-function loadDebtRecords() {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = window.localStorage.getItem(DEBT_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function getDebtRemainingAmount(record) {
-  return Math.max(
-    0,
-    normalizeNumber(record.totalAmount) - normalizeNumber(record.paidAmount)
-  );
-}
-
-function buildDebtSummary(records) {
-  return records.reduce(
-    (acc, record) => {
-      const remaining = getDebtRemainingAmount(record);
-      if (record.direction === "hutang") {
-        acc.totalHutang += remaining;
-      } else {
-        acc.totalPiutang += remaining;
-      }
-      return acc;
-    },
-    { totalHutang: 0, totalPiutang: 0 }
-  );
 }
 
 function createFinancialTransaction({
@@ -188,8 +133,7 @@ function createFinancialTransaction({
   };
 }
 
-function buildFinancialTransactions({ summary, products, stockLogs, range, debtRecords }) {
-  const productMap = new Map(products.map((product) => [product.id, product]));
+function buildFinancialTransactions({ summary }) {
   const salesRows = summary.accessoryTransactions.map((transaction) => {
     const items = Array.isArray(transaction.items) ? transaction.items : [];
     const itemCount = items.reduce((sum, item) => sum + normalizeNumber(item.qty), 0);
@@ -269,33 +213,6 @@ function buildFinancialTransactions({ summary, products, stockLogs, range, debtR
     })
   );
 
-  const stockRows = stockLogs
-    .filter((log) => log.tipe === "masuk" && normalizeNumber(log.jumlah) > 0)
-    .filter((log) => isWithinRange(log.created_at, range))
-    .map((log) => {
-      const product = productMap.get(log.produk_id);
-      const qty = Math.abs(normalizeNumber(log.jumlah));
-      const amount = qty * normalizeNumber(product?.harga_beli);
-
-      return createFinancialTransaction({
-        sortAt: log.created_at,
-        noTransaksi: log.referensi || `STOK-${String(log.id || "").slice(0, 8).toUpperCase()}`,
-        tanggal: formatReportDateTime(log.created_at),
-        kasir: "Sriyati",
-        jenis: "Modal Barang",
-        keterangan: [
-          `Pembelian stok ${product?.nama || "Produk"}`,
-          `${qty} ${product?.satuan || "pcs"}`,
-          log.catatan,
-        ]
-          .filter(Boolean)
-          .join(" - "),
-        nominalKeluar: amount,
-        metode: "-",
-      });
-    })
-    .filter((row) => row.nominalKeluar > 0);
-
   const cashRows = summary.cashEntries.map((entry) => {
     const isIncome = entry.jenis === "pemasukan";
     const categoryLabel = cashCategoryLabelMap[entry.kategori] || entry.kategori || "Kas";
@@ -316,32 +233,53 @@ function buildFinancialTransactions({ summary, products, stockLogs, range, debtR
     });
   });
 
-  const debtPaymentRows = debtRecords.flatMap((record) =>
-    (Array.isArray(record.payments) ? record.payments : [])
-      .filter((payment) => isWithinRange(payment.createdAt, range))
-      .map((payment) => {
-        const isReceivable = record.direction !== "hutang";
-        return createFinancialTransaction({
-          sortAt: payment.createdAt,
-          noTransaksi: record.reference || `HP-${String(record.id || "").slice(0, 8).toUpperCase()}`,
-          tanggal: formatReportDateTime(payment.createdAt),
-          kasir: "Sriyati",
-          jenis: isReceivable ? "Piutang" : "Hutang",
-          keterangan: [
-            isReceivable ? "Pembayaran piutang" : "Pembayaran hutang",
-            record.partyName,
-            payment.note,
-          ]
-            .filter(Boolean)
-            .join(" - "),
-          nominalMasuk: isReceivable ? payment.amount : 0,
-          nominalKeluar: isReceivable ? 0 : payment.amount,
-          metode: "Cash",
-        });
-      })
+  const supplierReturnRows = (summary.supplierReturns || []).map((row) =>
+    createFinancialTransaction({
+      sortAt: row.created_at,
+      noTransaksi: row.no_retur,
+      tanggal: formatReportDateTime(row.created_at),
+      kasir: formatCashierName(row.created_by || "Sriyati"),
+      jenis: "Retur Supplier",
+      keterangan: [
+        row.supplier_name,
+        `${row.total_quantity || 0} pcs keluar stok`,
+        row.status,
+      ]
+        .filter(Boolean)
+        .join(" - "),
+      nominalKeluar: row.total_estimated_value,
+      metode: row.settlement_method || row.status || "-",
+    })
   );
 
-  return [...salesRows, ...digitalRows, ...logisticsRows, ...stockRows, ...cashRows, ...debtPaymentRows]
+  const customerReturnRows = (summary.customerReturns || []).map((row) =>
+    createFinancialTransaction({
+      sortAt: row.created_at,
+      noTransaksi: row.no_retur,
+      tanggal: formatReportDateTime(row.created_at),
+      kasir: formatCashierName(row.created_by || "Sriyati"),
+      jenis: "Retur Konsumen",
+      keterangan: [
+        row.transaction_no,
+        row.customer_name,
+        `${row.total_quantity || 0} pcs`,
+        row.restock ? "Restock" : "Tidak restock",
+      ]
+        .filter(Boolean)
+        .join(" - "),
+      nominalKeluar: row.total_refund_amount,
+      metode: row.refund_method || "-",
+    })
+  );
+
+  return [
+    ...salesRows,
+    ...digitalRows,
+    ...logisticsRows,
+    ...cashRows,
+    ...supplierReturnRows,
+    ...customerReturnRows,
+  ]
     .sort((left, right) => new Date(left.sortAt) - new Date(right.sortAt))
     .map((transaction) => ({
       ...transaction,
@@ -365,45 +303,119 @@ function buildCashFlowRows(transactions) {
     .filter((row) => row.nominal > 0);
 }
 
-function buildReportSummary(transactions, debtRecords, saldoAwal) {
-  const debtSummary = buildDebtSummary(debtRecords);
+function buildExpenseBreakdown(transactions) {
+  return transactions.reduce(
+    (acc, row) => {
+      if (row.nominalKeluar <= 0) return acc;
+      if (row.jenis === "Modal Barang") {
+        acc["Modal Barang"] += row.nominalKeluar;
+      } else if (row.jenis === "Operasional") {
+        acc.Operasional += row.nominalKeluar;
+      } else {
+        acc["Lain-lain"] += row.nominalKeluar;
+      }
+      return acc;
+    },
+    { "Modal Barang": 0, Operasional: 0, "Lain-lain": 0 }
+  );
+}
+
+function buildReportSummary(transactions, saldoAwal, dashboardSummary) {
+  const totalPenjualan = transactions
+    .filter((row) => row.jenis === "Penjualan")
+    .reduce((sum, row) => sum + row.nominalMasuk, 0);
+  const totalOperasional = transactions
+    .filter((row) => row.jenis === "Operasional")
+    .reduce((sum, row) => sum + row.nominalKeluar, 0);
+  const totalReturSupplier = transactions
+    .filter((row) => row.jenis === "Retur Supplier")
+    .reduce((sum, row) => sum + row.nominalKeluar, 0);
+  const totalReturKonsumen = transactions
+    .filter((row) => row.jenis === "Retur Konsumen")
+    .reduce((sum, row) => sum + row.nominalKeluar, 0);
+  const jumlahTransaksi = transactions.filter((row) => row.jenis === "Penjualan").length;
 
   return {
     saldoAwal,
-    totalPenjualan: transactions
-      .filter((row) => row.jenis === "Penjualan")
-      .reduce((sum, row) => sum + row.nominalMasuk, 0),
-    totalModalBarang: transactions
-      .filter((row) => row.jenis === "Modal Barang")
-      .reduce((sum, row) => sum + row.nominalKeluar, 0),
-    totalBiayaOperasional: transactions
-      .filter((row) => row.jenis === "Operasional")
-      .reduce((sum, row) => sum + row.nominalKeluar, 0),
-    totalHutangPiutang: debtSummary.totalPiutang + debtSummary.totalHutang,
+    totalPenjualan,
+    totalModalBarang: Math.max(0, normalizeNumber(totalPenjualan) - normalizeNumber(dashboardSummary.keuntunganKotor)),
+    totalBiayaOperasional: totalOperasional,
+    totalReturSupplier,
+    totalReturKonsumen,
+    returnSummary: dashboardSummary.returnSummary,
+    jumlahTransaksi,
+    expenseBreakdown: buildExpenseBreakdown(transactions),
+    totalHutangPiutang: 0,
+  };
+}
+
+function createEmptyFinancialSummary() {
+  return {
+    omzet: 0,
+    keuntunganKotor: 0,
+    labaBersih: 0,
+    breakdown: [],
+    cashDailySummary: [],
+    accessoryTransactions: [],
+    digitalTransactions: [],
+    logisticsTransactions: [],
+    cashEntries: [],
+    supplierReturns: [],
+    customerReturns: [],
+    returnSummary: {
+      supplier: { estimatedValue: 0, quantity: 0 },
+      customer: { refundAmount: 0, quantity: 0 },
+    },
   };
 }
 
 export default function FinanceReportPage() {
-  const { getDashboardSummary, products, stockLogs } = useData();
+  const {
+    coreError,
+    coreLoading,
+    getDashboardSummary,
+    refreshTransactions,
+    walletBalances,
+  } = useReports();
   const [period, setPeriod] = useState("today");
   const [customRange, setCustomRange] = useState({
     startDate: formatDateInput(new Date()),
     endDate: formatDateInput(new Date()),
   });
+  const firstPaintReady = useFirstPaintReady();
 
   const range = useMemo(() => getRange(period, customRange), [customRange, period]);
-  const summary = useMemo(() => getDashboardSummary(range), [getDashboardSummary, range]);
+  const summary = useMemo(
+    () => (firstPaintReady ? getDashboardSummary(range) : createEmptyFinancialSummary()),
+    [firstPaintReady, getDashboardSummary, range]
+  );
+  const dailySalesSummary = useDailySalesSummary(range);
+  const reportMetrics = useMemo(() => {
+    if (!dailySalesSummary.available) {
+      return {
+        omzet: summary.omzet,
+        modal: summary.omzet - summary.keuntunganKotor,
+        keuntunganKotor: summary.keuntunganKotor,
+        labaBersih: summary.labaBersih,
+        source: "client",
+      };
+    }
+
+    const expenseImpact = Number(summary.keuntunganKotor || 0) - Number(summary.labaBersih || 0);
+    return {
+      omzet: dailySalesSummary.totals.revenue,
+      modal: dailySalesSummary.totals.cost,
+      keuntunganKotor: dailySalesSummary.totals.profit,
+      labaBersih: dailySalesSummary.totals.profit - expenseImpact,
+      source: "summary_view",
+    };
+  }, [dailySalesSummary.available, dailySalesSummary.totals, summary]);
 
   const exportReport = async () => {
     const exportedAt = new Date();
     const periodLabel = formatRangeLabel(range);
-    const debtRecords = loadDebtRecords();
     const transactions = buildFinancialTransactions({
       summary,
-      products,
-      stockLogs,
-      range,
-      debtRecords,
     });
     const cashFlow = buildCashFlowRows(transactions);
     const saldoAwal = summary.cashDailySummary[0]?.saldo_awal || 0;
@@ -412,11 +424,13 @@ export default function FinanceReportPage() {
       exportedAt,
       periodLabel,
       fileName: `Laporan_Keuangan_Raja_Aksesoris_${formatDateInput(exportedAt)}.xlsx`,
-      summary: buildReportSummary(transactions, debtRecords, saldoAwal),
+      summary: buildReportSummary(transactions, saldoAwal, summary),
+      walletBalances,
       cashFlow,
       transactions,
     };
 
+    const { exportFinancialReport } = await import("../utils/exportFinancialReport");
     await exportFinancialReport(reportData);
   };
 
@@ -425,7 +439,7 @@ export default function FinanceReportPage() {
       <PageHeader
         eyebrow="Finance"
         title="Laporan keuangan"
-        description="Ringkasan omzet, modal, profit, dan pengeluaran toko dalam satu tampilan yang siap dipakai owner."
+        description="Ringkasan omzet, modal, profit, dan pengeluaran toko dalam satu tampilan yang siap dipakai pemilik toko."
         icon="chart"
         actions={
           <>
@@ -452,6 +466,13 @@ export default function FinanceReportPage() {
         }
       />
 
+      <FeatureLoadPanel
+        error={coreError || dailySalesSummary.error}
+        loading={coreLoading || dailySalesSummary.loading}
+        loadingText="Sinkronisasi laporan keuangan..."
+        onRetry={refreshTransactions}
+      />
+
       {period === "custom" ? (
         <Panel className="grid gap-3 p-5 md:grid-cols-2">
           <input
@@ -474,13 +495,53 @@ export default function FinanceReportPage() {
       ) : null}
 
       <div className="grid gap-4 xl:grid-cols-4">
-        <MetricCard label="Total omzet" value={formatRupiah(summary.omzet)} />
+        <MetricCard label="Total omzet" value={formatRupiah(reportMetrics.omzet)} />
         <MetricCard
           label="Total modal"
-          value={formatRupiah(summary.omzet - summary.keuntunganKotor)}
+          value={formatRupiah(reportMetrics.modal)}
         />
-        <MetricCard label="Profit kotor" value={formatRupiah(summary.keuntunganKotor)} accent="success" />
-        <MetricCard label="Profit bersih" value={formatRupiah(summary.labaBersih)} accent="gold" />
+        <MetricCard label="Profit kotor" value={formatRupiah(reportMetrics.keuntunganKotor)} accent="success" />
+        <MetricCard label="Profit bersih" value={formatRupiah(reportMetrics.labaBersih)} accent="gold" />
+      </div>
+
+      <Panel className="px-5 py-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm font-semibold text-slate-700">
+            Sumber angka laporan:{" "}
+            <span className="text-slate-950">
+              {reportMetrics.source === "summary_view"
+                ? "ringkasan harian"
+                : "perhitungan langsung"}
+            </span>
+          </p>
+          {dailySalesSummary.loading ? <span className="brand-badge-neutral">Memuat ringkasan</span> : null}
+        </div>
+        {dailySalesSummary.error ? (
+          <p className="mt-2 text-sm text-amber-700">
+            Ringkasan harian belum tersedia; laporan tetap dihitung dari transaksi yang ada.
+          </p>
+        ) : null}
+      </Panel>
+
+      <div className="grid gap-4 xl:grid-cols-4">
+        <MetricCard
+          label="Retur supplier"
+          value={formatRupiah(summary.returnSummary?.supplier?.estimatedValue || 0)}
+        />
+        <MetricCard
+          label="Qty retur supplier"
+          value={`${summary.returnSummary?.supplier?.quantity || 0} pcs`}
+          accent="gold"
+        />
+        <MetricCard
+          label="Refund konsumen"
+          value={formatRupiah(summary.returnSummary?.customer?.refundAmount || 0)}
+        />
+        <MetricCard
+          label="Qty retur konsumen"
+          value={`${summary.returnSummary?.customer?.quantity || 0} pcs`}
+          accent="success"
+        />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
@@ -492,7 +553,7 @@ export default function FinanceReportPage() {
             {summary.breakdown.map((item) => (
               <div
                 key={item.key}
-                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
+                className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-4"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -501,7 +562,7 @@ export default function FinanceReportPage() {
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-bold text-slate-950">{formatRupiah(item.omzet)}</p>
-                    <p className="mt-1 text-xs text-[var(--brand-gold)]">
+                    <p className="mt-1 text-xs text-[var(--brand-gold-strong)]">
                       Profit {formatRupiah(item.keuntungan)}
                     </p>
                   </div>
@@ -524,7 +585,7 @@ export default function FinanceReportPage() {
           </div>
 
           <div className="brand-scrollbar overflow-x-auto">
-            <table className="brand-table">
+            <table className="brand-table brand-table-sticky-first">
               <thead>
                 <tr>
                   <th>Tanggal</th>
@@ -557,12 +618,12 @@ export default function FinanceReportPage() {
       </div>
 
       <Panel variant="strong" className="p-6">
-        <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[var(--brand-gold)]">
+        <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[var(--brand-gold-strong)]">
           Ringkasan periode
         </p>
         <p className="mt-3 text-sm leading-7 text-slate-700">
           Data ditarik dari transaksi aksesoris, layanan digital, logistik, dan kas operasional.
-          Laporan ini cocok untuk rekap harian owner sebelum setor tunai atau tutup buku.
+          Laporan ini cocok untuk rekap harian pemilik toko sebelum setor tunai atau tutup buku.
         </p>
         <p className="mt-3 text-xs text-slate-500">
           Digenerate {formatDateTime(new Date(), { dateStyle: "medium", timeStyle: "short" })}
@@ -571,3 +632,4 @@ export default function FinanceReportPage() {
     </div>
   );
 }
+

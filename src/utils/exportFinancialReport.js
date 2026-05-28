@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
+import { formatCashierName } from "./cashier";
 import { formatDateInput, formatDateTime } from "./format";
 
 const REPORT_TITLE = "LAPORAN KEUANGAN RAJA AKSESORIS";
@@ -10,6 +11,9 @@ const GOLD_SOFT = "FFF8E1";
 const BORDER_COLOR = "FFD1D5DB";
 const TEXT_DARK = "FF0F172A";
 const TEXT_LIGHT = "FFFFFFFF";
+
+// Separate cash and digital wallets
+const DIGITAL_WALLETS = ["DANA", "Bank Mas", "Wahana", "PASAR KUOTA", "Shopee", "BCA", "QRIS"];
 
 function normalizeText(value, fallback = "-") {
   const text = String(value ?? "").trim();
@@ -112,6 +116,13 @@ function styleSummaryValuePair(sheet, rowNumber, labelColumn, valueColumn) {
   valueCell.alignment = { horizontal: "right", vertical: "middle" };
 }
 
+function styleSummaryFormulaCell(cell, format = CURRENCY_FORMAT) {
+  cell.border = createThinBorder();
+  cell.numFmt = format;
+  cell.alignment = { horizontal: "right", vertical: "middle" };
+  cell.font = { bold: true, color: { argb: TEXT_DARK } };
+}
+
 function styleDataRow(row, { currencyColumns = [], numberColumns = [], centerColumns = [] } = {}) {
   row.eachCell((cell, columnNumber) => {
     const isCurrency = currencyColumns.includes(columnNumber);
@@ -128,6 +139,16 @@ function styleDataRow(row, { currencyColumns = [], numberColumns = [], centerCol
     if (isCurrency) cell.numFmt = CURRENCY_FORMAT;
     if (isNumber) cell.numFmt = NUMBER_FORMAT;
   });
+}
+
+function addTableHeader(sheet, rowNumber, headers) {
+  const row = sheet.getRow(rowNumber);
+  headers.forEach((header, index) => {
+    row.getCell(index + 1).value = header;
+  });
+  row.height = 26;
+  styleTableHeader(row);
+  return row;
 }
 
 function compareBySortAt(left, right) {
@@ -152,7 +173,7 @@ function normalizeTransactionRows(transactions = []) {
           transaction.noTransaksi || transaction.no_transaksi || transaction.reference || transaction.id
         ),
         tanggal: normalizeText(transaction.tanggal || transaction.date),
-        kasir: normalizeText(transaction.kasir || transaction.cashier || transaction.kasir_id),
+        kasir: formatCashierName(transaction.kasir || transaction.cashier || transaction.kasir_id),
         jenis: normalizeText(transaction.jenis || transaction.type || transaction.kategori, "Transaksi"),
         keterangan: normalizeText(transaction.keterangan || transaction.description || transaction.note),
         nominalMasuk: nominalMasuk || (tipe.includes("masuk") ? rawAmount : 0),
@@ -207,7 +228,6 @@ function buildComputedSummary(inputSummary = {}, cashFlowRows, transactionRows) 
   const totalPengeluaran = cashFlowRows
     .filter((row) => row.tipe === "Keluar")
     .reduce((sum, row) => sum + row.nominal, 0);
-  const labaBersih = totalPemasukan - totalPengeluaran;
 
   const totalPenjualan =
     inputSummary.totalPenjualan ??
@@ -217,49 +237,115 @@ function buildComputedSummary(inputSummary = {}, cashFlowRows, transactionRows) 
   const totalModalBarang =
     inputSummary.totalModalBarang ??
     inputSummary.totalModal ??
-    transactionRows
-      .filter((row) => row.jenis.toLowerCase().includes("modal"))
-      .reduce((sum, row) => sum + row.nominalKeluar, 0);
+    0;
   const totalBiayaOperasional =
     inputSummary.totalBiayaOperasional ??
     inputSummary.totalOperasional ??
     transactionRows
       .filter((row) => row.jenis.toLowerCase().includes("operasional"))
       .reduce((sum, row) => sum + row.nominalKeluar, 0);
+  const expenseBreakdown = buildExpenseBreakdown(inputSummary, transactionRows);
+  const jumlahTransaksi =
+    inputSummary.jumlahTransaksi ??
+    transactionRows.filter((row) => row.nominalMasuk > 0 || row.nominalKeluar > 0).length;
+  const labaKotor = normalizeNumber(totalPenjualan) - normalizeNumber(totalModalBarang);
+  const labaBersih = labaKotor - normalizeNumber(totalBiayaOperasional);
+  const totalReturSupplier = normalizeNumber(inputSummary.totalReturSupplier);
+  const totalReturKonsumen = normalizeNumber(inputSummary.totalReturKonsumen);
 
   return {
     saldoAwal,
     totalPemasukan,
     totalPengeluaran,
-    labaBersih,
-    saldoAkhir: saldoAwal + labaBersih,
+    saldoAkhir: saldoAwal + totalPemasukan - totalPengeluaran,
     totalPenjualan: normalizeNumber(totalPenjualan),
     totalModalBarang: normalizeNumber(totalModalBarang),
+    labaKotor,
     totalBiayaOperasional: normalizeNumber(totalBiayaOperasional),
+    labaBersih,
+    totalReturSupplier,
+    totalReturKonsumen,
+    jumlahTransaksi: normalizeNumber(jumlahTransaksi),
+    rataRataTransaksi:
+      normalizeNumber(jumlahTransaksi) > 0
+        ? normalizeNumber(totalPenjualan) / normalizeNumber(jumlahTransaksi)
+        : 0,
     totalHutangPiutang: normalizeNumber(inputSummary.totalHutangPiutang),
+    expenseBreakdown,
   };
 }
 
-function buildSummarySheet(workbook, computedSummary, periodLabel, exportedAtLabel) {
-  const sheet = workbook.addWorksheet("Summary");
-  applyTitle(sheet, REPORT_TITLE, 5);
-  applyReportMeta(sheet, periodLabel, exportedAtLabel, 5);
+function buildExpenseBreakdown(inputSummary = {}, transactionRows = []) {
+  const fromInput = inputSummary.expenseBreakdown || {};
+  const normalizeCategory = (jenis) => {
+    const normalized = String(jenis || "").toLowerCase();
+    if (normalized.includes("modal")) return "Modal Barang";
+    if (normalized.includes("operasional")) return "Operasional";
+    return "Lain-lain";
+  };
+  const grouped = transactionRows.reduce(
+    (acc, row) => {
+      if (row.nominalKeluar <= 0) return acc;
+      const category = normalizeCategory(row.jenis);
+      acc[category] += row.nominalKeluar;
+      return acc;
+    },
+    { "Modal Barang": 0, Operasional: 0, "Lain-lain": 0 }
+  );
 
-  styleSectionHeader(sheet, 5, 1, 2, "MAIN SUMMARY");
-  styleSectionHeader(sheet, 5, 4, 5, "DETAIL BREAKDOWN");
+  return {
+    "Modal Barang": normalizeNumber(fromInput["Modal Barang"] ?? fromInput.modalBarang ?? grouped["Modal Barang"]),
+    Operasional: normalizeNumber(fromInput.Operasional ?? fromInput.operasional ?? grouped.Operasional),
+    "Lain-lain": normalizeNumber(fromInput["Lain-lain"] ?? fromInput.lainLain ?? grouped["Lain-lain"]),
+  };
+}
 
+function buildWalletRows(walletBalances = []) {
+  const balanceMap = new Map(
+    (Array.isArray(walletBalances) ? walletBalances : []).map((wallet) => [
+      normalizeText(wallet.name || wallet.wallet || wallet.label || wallet.id),
+      normalizeNumber(wallet.balance ?? wallet.saldo),
+    ])
+  );
+
+  return DIGITAL_WALLETS.map((walletName) => [walletName, balanceMap.get(walletName) || 0]);
+}
+
+function buildPaymentMethodRows(transactionRows = []) {
+  const grouped = new Map();
+
+  transactionRows.forEach((transaction) => {
+    const method = normalizeText(transaction.metode, "-");
+    const amount = transaction.nominalMasuk > 0 ? transaction.nominalMasuk : transaction.nominalKeluar;
+    if (amount <= 0) return;
+
+    const current = grouped.get(method) || { metode: method, jumlahTransaksi: 0, totalNominal: 0 };
+    current.jumlahTransaksi += 1;
+    current.totalNominal += amount;
+    grouped.set(method, current);
+  });
+
+  return [...grouped.values()].sort((left, right) => right.totalNominal - left.totalNominal);
+}
+
+function buildSummarySheet(
+  workbook,
+  computedSummary,
+  walletRows,
+  paymentMethodRows,
+  periodLabel,
+  exportedAtLabel
+) {
+  const sheet = workbook.addWorksheet("SUMMARY KEUANGAN");
+  applyTitle(sheet, REPORT_TITLE, 6);
+  applyReportMeta(sheet, periodLabel, exportedAtLabel, 6);
+
+  // MAIN SUMMARY
+  styleSectionHeader(sheet, 5, 1, 2, "RINGKASAN UTAMA");
   const mainRows = [
+    ["Saldo Awal", computedSummary.saldoAwal],
     ["Total Pemasukan", computedSummary.totalPemasukan],
     ["Total Pengeluaran", computedSummary.totalPengeluaran],
-    ["Laba Bersih", computedSummary.labaBersih],
-    ["Saldo Awal", computedSummary.saldoAwal],
-    ["Saldo Akhir", computedSummary.saldoAkhir],
-  ];
-  const detailRows = [
-    ["Total Penjualan", computedSummary.totalPenjualan],
-    ["Total Modal Barang", computedSummary.totalModalBarang],
-    ["Total Biaya Operasional", computedSummary.totalBiayaOperasional],
-    ["Total Hutang/Piutang", computedSummary.totalHutangPiutang],
   ];
 
   mainRows.forEach(([label, value], index) => {
@@ -270,36 +356,109 @@ function buildSummarySheet(workbook, computedSummary, periodLabel, exportedAtLab
     row.height = 23;
     styleSummaryValuePair(sheet, rowNumber, 1, 2);
   });
+  sheet.getRow(9).getCell(1).value = "Saldo Akhir";
+  sheet.getRow(9).getCell(2).value = {
+    formula: "B6+B7-B8",
+    result: computedSummary.saldoAkhir,
+  };
+  sheet.getRow(9).height = 23;
+  styleSummaryValuePair(sheet, 9, 1, 2);
+  styleSummaryFormulaCell(sheet.getCell("B9"));
 
-  detailRows.forEach(([label, value], index) => {
+  // PROFIT SECTION
+  styleSectionHeader(sheet, 5, 4, 6, "LABA RUGI");
+  const profitRows = [
+    ["Total Penjualan", computedSummary.totalPenjualan],
+    ["Total Modal", computedSummary.totalModalBarang],
+    ["Laba Kotor", { formula: "E6-E7", result: computedSummary.labaKotor }],
+    ["Total Operasional", computedSummary.totalBiayaOperasional],
+    ["Laba Bersih", { formula: "E8-E9", result: computedSummary.labaBersih }],
+  ];
+
+  profitRows.forEach(([label, value], index) => {
     const rowNumber = index + 6;
-    const row = sheet.getRow(rowNumber);
-    row.getCell(4).value = label;
-    row.getCell(5).value = value;
-    row.height = 23;
+    sheet.getRow(rowNumber).getCell(4).value = label;
+    sheet.getRow(rowNumber).getCell(5).value = value;
+    sheet.getRow(rowNumber).height = 23;
+    styleSummaryValuePair(sheet, rowNumber, 4, 5);
+    if (typeof value === "object") styleSummaryFormulaCell(sheet.getCell(rowNumber, 5));
+  });
+
+  // INSIGHTS
+  styleSectionHeader(sheet, 12, 1, 2, "WAWASAN BISNIS");
+  const insightRows = [
+    ["Jumlah Transaksi", computedSummary.jumlahTransaksi],
+    ["Rata-rata Transaksi", { formula: "IF(B13=0,0,E6/B13)", result: computedSummary.rataRataTransaksi }],
+    ["Retur Supplier", computedSummary.totalReturSupplier],
+    ["Retur Konsumen", computedSummary.totalReturKonsumen],
+  ];
+  insightRows.forEach(([label, value], index) => {
+    const rowNumber = index + 13;
+    sheet.getRow(rowNumber).getCell(1).value = label;
+    sheet.getRow(rowNumber).getCell(2).value = value;
+    sheet.getRow(rowNumber).height = 23;
+    styleSummaryValuePair(sheet, rowNumber, 1, 2);
+    if (rowNumber === 13) sheet.getCell(rowNumber, 2).numFmt = NUMBER_FORMAT;
+    if (rowNumber === 14) styleSummaryFormulaCell(sheet.getCell(rowNumber, 2));
+  });
+
+  // EXPENSE BREAKDOWN
+  styleSectionHeader(sheet, 12, 4, 5, "RINCIAN PENGELUARAN");
+  Object.entries(computedSummary.expenseBreakdown).forEach(([label, value], index) => {
+    const rowNumber = index + 13;
+    sheet.getRow(rowNumber).getCell(4).value = label;
+    sheet.getRow(rowNumber).getCell(5).value = value;
+    sheet.getRow(rowNumber).height = 23;
     styleSummaryValuePair(sheet, rowNumber, 4, 5);
   });
 
-  sheet.getCell("A12").value = "Catatan";
-  sheet.getCell("A12").font = { bold: true, color: { argb: TEXT_DARK } };
-  sheet.getCell("B12").value =
-    "Laba bersih dihitung dari total kas masuk dikurangi total kas keluar pada periode laporan.";
-  sheet.mergeCells("B12:E12");
-  for (let column = 1; column <= 5; column += 1) {
-    const cell = sheet.getCell(12, column);
-    cell.border = createThinBorder();
-    cell.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
-  }
+  // DIGITAL WALLET BALANCE
+  styleSectionHeader(sheet, 17, 1, 2, "SALDO WALLET (DIGITAL)");
+  addTableHeader(sheet, 18, ["Wallet", "Saldo"]);
+  walletRows.forEach(([wallet, saldo], index) => {
+    const row = sheet.getRow(index + 19);
+    row.values = [wallet, saldo];
+    row.height = 23;
+    styleDataRow(row, { currencyColumns: [2] });
+  });
 
-  autoFitColumns(sheet, [24, 20, 3, 26, 22], 44);
+  // PAYMENT METHOD SUMMARY
+  styleSectionHeader(sheet, 17, 4, 6, "RINGKASAN METODE PEMBAYARAN");
+  const paymentHeader = sheet.getRow(18);
+  ["Metode", "Jumlah Transaksi", "Total Nominal"].forEach((header, index) => {
+    paymentHeader.getCell(index + 4).value = header;
+  });
+  paymentHeader.height = 26;
+  [4, 5, 6].forEach((column) => {
+    const cell = paymentHeader.getCell(column);
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GOLD } };
+    cell.font = { bold: true, color: { argb: TEXT_LIGHT } };
+    cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    cell.border = createThinBorder();
+  });
+
+  paymentMethodRows.forEach((item, index) => {
+    const rowNumber = index + 19;
+    const row = sheet.getRow(rowNumber);
+    row.getCell(4).value = item.metode;
+    row.getCell(5).value = item.jumlahTransaksi;
+    row.getCell(6).value = item.totalNominal;
+    row.height = 23;
+    styleDataRow(row, {
+      currencyColumns: [6],
+      numberColumns: [5],
+      centerColumns: [5],
+    });
+  });
+
+  autoFitColumns(sheet, [24, 20, 3, 24, 18, 20], 44);
   sheet.views = [{ showGridLines: false }];
-  sheet.getRow(12).height = 36;
 
   return sheet;
 }
 
 function buildCashFlowSheet(workbook, cashFlowRows, computedSummary, periodLabel, exportedAtLabel) {
-  const sheet = workbook.addWorksheet("Cash Flow");
+  const sheet = workbook.addWorksheet("CASH FLOW");
   applyTitle(sheet, "CASH FLOW (ARUS KAS)", 6);
   applyReportMeta(sheet, periodLabel, exportedAtLabel, 6);
 
@@ -313,15 +472,22 @@ function buildCashFlowSheet(workbook, cashFlowRows, computedSummary, periodLabel
   let runningBalance = computedSummary.saldoAwal;
 
   cashFlowRows.forEach((item, index) => {
+    const rowNumber = index + 6;
     runningBalance += item.tipe === "Masuk" ? item.nominal : -item.nominal;
-    const row = sheet.getRow(index + 6);
+    const row = sheet.getRow(rowNumber);
     row.values = [
       item.tanggal,
       item.tipe,
       item.kategori,
       item.keterangan,
       item.nominal,
-      runningBalance,
+      {
+        formula:
+          rowNumber === 6
+            ? `'SUMMARY KEUANGAN'!B6+IF(B${rowNumber}="Masuk",E${rowNumber},-E${rowNumber})`
+            : `F${rowNumber - 1}+IF(B${rowNumber}="Masuk",E${rowNumber},-E${rowNumber})`,
+        result: runningBalance,
+      },
     ];
     row.height = 23;
     styleDataRow(row, {
@@ -338,7 +504,7 @@ function buildCashFlowSheet(workbook, cashFlowRows, computedSummary, periodLabel
 }
 
 function buildTransactionSheet(workbook, transactionRows, periodLabel, exportedAtLabel) {
-  const sheet = workbook.addWorksheet("Transaksi Keuangan");
+  const sheet = workbook.addWorksheet("TRANSACTION DETAIL");
   applyTitle(sheet, "TRANSAKSI KEUANGAN", 8);
   applyReportMeta(sheet, periodLabel, exportedAtLabel, 8);
 
@@ -398,6 +564,8 @@ export async function exportFinancialReport(data = {}) {
       : buildCashFlowFromTransactions(transactionRows)
   );
   const computedSummary = buildComputedSummary(data.summary, cashFlowRows, transactionRows);
+  const walletRows = buildWalletRows(data.walletBalances);
+  const paymentMethodRows = buildPaymentMethodRows(transactionRows);
   const workbook = new ExcelJS.Workbook();
   const fileName =
     String(data.fileName || `Laporan_Keuangan_Raja_Aksesoris_${formatDateInput(exportedAt)}.xlsx`)
@@ -408,7 +576,14 @@ export async function exportFinancialReport(data = {}) {
   workbook.created = exportedAt;
   workbook.modified = exportedAt;
 
-  buildSummarySheet(workbook, computedSummary, periodLabel, exportedAtLabel);
+  buildSummarySheet(
+    workbook,
+    computedSummary,
+    walletRows,
+    paymentMethodRows,
+    periodLabel,
+    exportedAtLabel
+  );
   buildCashFlowSheet(workbook, cashFlowRows, computedSummary, periodLabel, exportedAtLabel);
   buildTransactionSheet(workbook, transactionRows, periodLabel, exportedAtLabel);
 
