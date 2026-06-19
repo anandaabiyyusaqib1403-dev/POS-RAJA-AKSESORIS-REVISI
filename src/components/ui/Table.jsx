@@ -117,8 +117,8 @@ function DataTable({
           ))
         ) : (
           <TableRow>
-            <TableCell className="text-center text-slate-500" colSpan={columns.length}>
-              {emptyMessage}
+            <TableCell className="py-8 text-center" colSpan={columns.length}>
+              <span className="text-sm font-semibold text-slate-500">{emptyMessage}</span>
             </TableCell>
           </TableRow>
         )}
@@ -173,9 +173,9 @@ function VirtualizedDataTable({
   }
 
   return (
-    <div className={`overflow-hidden rounded-lg border border-[var(--border-muted)] bg-white ${className}`.trim()}>
+    <div className={`overflow-hidden rounded-lg border border-[var(--border-muted)] bg-white shadow-[var(--brand-shadow-soft)] ${className}`.trim()}>
       <div
-        className="grid border-b border-[var(--border-muted)] bg-[var(--surface-secondary)] text-xs font-bold uppercase tracking-[0.12em] text-slate-500"
+        className="grid border-b border-[var(--border-muted)] bg-[var(--table-header-bg)] text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500"
         style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(160px, 1fr))` }}
         role="row"
       >

@@ -122,6 +122,7 @@ export function getSessionLabel(status, lastSeenAt, now = Date.now(), activitySt
 
 export function buildEmployees(staffUsers, user, activeShifts, payrolls = [], rosterRows = [], now = Date.now()) {
   const rosterById = new Map(rosterRows.map((row) => [row.id, row]));
+  const staffById = new Map(staffUsers.map((row) => [row.id, row]));
   const rows = rosterRows.length ? [...rosterRows] : [...staffUsers];
 
   if (user && !rows.some((row) => row.id === user.id)) {
@@ -151,7 +152,18 @@ export function buildEmployees(staffUsers, user, activeShifts, payrolls = [], ro
 
   return rows.map((row, index) => {
     const roster = rosterById.get(row.id) || row;
+    const staffProfile = staffById.get(row.id) || {};
     const role = roster.role || row.role || "kasir";
+    const activeShift = activeShifts.find((shift) => shift.cashier_id === row.id);
+    const cashierStation =
+      row.cashier_station ||
+      roster.cashier_station ||
+      staffProfile.cashier_station ||
+      activeShift?.cashier_station ||
+      row.station_name ||
+      roster.station_name ||
+      staffProfile.station_name ||
+      "";
     const isWorking = Boolean(roster.active_shift_id || activeCashierIds.has(row.id));
     const accountStatus = roster.account_status || row.status || "active";
     const status = accountStatus !== "active" ? accountStatus : resolveSessionStatus(roster, now);
@@ -173,6 +185,8 @@ export function buildEmployees(staffUsers, user, activeShifts, payrolls = [], ro
       username: row.username || row.email || createUsername(row.nama || row.name, index),
       phone: row.phone || row.nomor_hp || "-",
       role,
+      cashierStation,
+      stationName: row.station_name || roster.station_name || staffProfile.station_name || cashierStation,
       accountStatus,
       status,
       sessionStatus: ["online", "idle", "offline"].includes(status) ? status : "blocked",

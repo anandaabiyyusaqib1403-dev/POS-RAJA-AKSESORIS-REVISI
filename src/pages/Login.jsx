@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import AppIcon from "../components/app/AppIcon";
+import { LockKeyhole, LogIn, Mail, RefreshCcw, ShieldCheck } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import BrandMark from "../components/BrandMark";
 import LoadingState from "../components/LoadingState";
@@ -7,6 +7,13 @@ import Panel from "../components/app/Panel";
 import { useAuth } from "../contexts/useAuth";
 import { getDefaultRoute } from "../core/navigation/navigation";
 import { resetBrowserAppStateAndReload } from "../utils/browserRecovery";
+
+const OPERATIONAL_POINTS = [
+  ["Kasir", "Transaksi cepat"],
+  ["Stok", "Inventory aktif"],
+  ["Saldo", "Kas & dompet"],
+  ["Digital", "Layanan harian"],
+];
 
 export default function Login() {
   const {
@@ -59,9 +66,9 @@ export default function Login() {
 
   if (authState === "profile_error" && !user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--brand-bg)] px-4">
-        <Panel className="w-full max-w-[440px] p-8 text-center">
-          <div className="mx-auto inline-flex rounded-lg border border-red-200 bg-red-50 p-4">
+      <div className="flex min-h-screen items-center justify-center bg-[#f4f7fb] px-4 py-8">
+        <Panel className="w-full max-w-[440px] p-7 text-center shadow-[0_24px_70px_rgba(15,23,42,0.12)]">
+          <div className="mx-auto inline-flex rounded-lg border border-red-200 bg-red-50 p-3">
             <BrandMark size="lg" className="h-14 w-14" />
           </div>
           <h1 className="mt-5 font-display text-2xl font-bold text-slate-950">
@@ -101,131 +108,117 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--brand-bg)] px-4 py-10">
-      <div className="mx-auto grid min-h-[calc(100vh-5rem)] w-full max-w-7xl gap-8 lg:grid-cols-[1.15fr_0.85fr]">
-        <Panel
-          variant="strong"
-          className="brand-glow hidden overflow-hidden p-10 lg:flex lg:flex-col lg:justify-between"
-        >
-          <div>
-            <div className="inline-flex rounded-lg border border-[var(--brand-gold)]/22 bg-white p-4 shadow-[0_18px_40px_rgba(212,175,55,0.12)]">
-              <BrandMark size="xl" className="h-20 w-20" />
+    <div className="login-os-shell min-h-screen overflow-hidden text-slate-950">
+      <main className="login-os-main relative z-10">
+        <section className="login-os-console" aria-label="Login POS Raja Aksesoris">
+          <div className="login-os-brand-panel">
+            <div className="login-brand-mark flex items-center justify-center bg-white">
+              <BrandMark size="xl" className="h-[96px] w-[96px]" />
             </div>
-            <p className="mt-8 brand-kicker text-[var(--brand-gold)]/90">
+
+            <h1 className="mt-7 font-display text-[38px] font-black leading-[1.02] text-slate-950">
               Raja Aksesoris
-            </p>
-            <h1 className="mt-4 max-w-3xl font-display text-5xl font-bold leading-tight tracking-tight text-slate-950">
-              Operasional toko terasa lebih ringan saat transaksi, stok, dan laporan jalan dalam satu ritme.
             </h1>
-            <p className="mt-5 max-w-2xl text-[15px] leading-8 text-slate-600">
-              Dipakai untuk aksesoris, pulsa, kuota, logistik, dan kas harian tanpa bikin kerja
-              kasir terasa berlapis.
+            <p className="login-brand-system mt-2 text-sm font-black uppercase tracking-[0.14em] text-[var(--brand-gold-strong)]">
+              Retail Operating System
             </p>
-          </div>
+            <p className="login-brand-subtitle mt-5 max-w-[320px] text-[15px] font-medium leading-7 text-slate-600">
+              Kelola kasir, stok, saldo, dan layanan digital dalam satu sistem.
+            </p>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            {[
-              {
-                icon: "pos",
-                title: "Transaksi cepat",
-                text: "Cari barang, atur jumlah, simpan, lalu cetak struk tanpa muter terlalu jauh.",
-              },
-              {
-                icon: "box",
-                title: "Stok lebih kebaca",
-                text: "Barang menipis, stok masuk, dan daftar produk aktif tetap gampang dipantau.",
-              },
-              {
-                icon: "chart",
-                title: "Angka lebih jelas",
-                text: "Omzet, profit, kas harian, dan channel penjualan langsung terkumpul rapi.",
-              },
-              {
-                icon: "wallet",
-                title: "Saldo lebih tenang",
-                text: "Dompet, transfer, dan transaksi digital punya catatan yang konsisten.",
-              },
-            ].map((item) => (
-              <div key={item.title} className="border-t border-slate-200 pt-4">
-                <div className="brand-badge">
-                  <AppIcon name={item.icon} className="h-3.5 w-3.5" />
-                  {item.title}
+            <div className="login-operation-grid" aria-label="Area operasional">
+              {OPERATIONAL_POINTS.map(([label, value]) => (
+                <div key={label} className="login-operation-item">
+                  <span>{label}</span>
+                  <strong>{value}</strong>
                 </div>
-                <p className="mt-3 text-sm leading-7 text-slate-700">{item.text}</p>
-              </div>
-            ))}
-          </div>
-        </Panel>
-
-        <div className="flex min-w-0 items-center justify-center">
-          <Panel className="w-full max-w-[480px] p-6 sm:p-8">
-            <div className="mb-8 text-center">
-              <div className="mx-auto inline-flex rounded-lg border border-[var(--brand-gold)]/18 bg-[var(--brand-gold)]/8 p-4">
-                <BrandMark size="lg" className="h-16 w-16" />
-              </div>
-              <p className="mt-5 brand-kicker text-[var(--brand-gold)]/90">
-                Login
-              </p>
-              <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-slate-950">
-                Masuk ke POS Raja Aksesoris
-              </h2>
-              <p className="mt-3 text-sm leading-7 text-slate-600">
-                Login sebagai pemilik toko atau kasir untuk mulai bekerja.
-              </p>
-              <p className="mt-2 text-xs font-semibold text-slate-500">
-                Akun: amri@raja.pos atau sriyati@raja.pos
-              </p>
+              ))}
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">Email</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  className="brand-input"
-                  placeholder="nama@rajaaksesoris.com"
-                  required
-                />
-              </div>
+            <p className="login-os-footnote">Retail Operations Platform</p>
+          </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  className="brand-input"
-                  placeholder="Masukkan password"
-                  required
-                />
-              </div>
-
-              {error ? (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {error}
+          <div className="login-os-form-panel">
+            <form onSubmit={handleSubmit} className="login-os-form">
+              <div className="mb-7 flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-display text-[30px] font-black leading-tight text-slate-950">
+                    Masuk ke POS
+                  </h2>
+                  <p className="mt-2 text-sm font-medium leading-6 text-slate-500">
+                    Akses aman untuk operasional toko hari ini.
+                  </p>
                 </div>
-              ) : null}
+                <span className="login-security-mark">
+                  <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+                </span>
+              </div>
 
-              <button
-                type="submit"
-                disabled={submitting || authState !== "signed_out"}
-                className="brand-button-primary w-full disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {submitting ? "Memproses..." : "Masuk ke Sistem"}
-              </button>
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-slate-500">
+                    Email
+                  </label>
+                  <div className="login-input-wrap">
+                    <Mail className="h-4 w-4 text-slate-400" aria-hidden="true" />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      className="login-input brand-login-input"
+                      placeholder="nama@rajaaksesoris.com"
+                      autoComplete="email"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-slate-500">
+                    Password
+                  </label>
+                  <div className="login-input-wrap">
+                    <LockKeyhole className="h-4 w-4 text-slate-400" aria-hidden="true" />
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      className="login-input brand-login-input"
+                      placeholder="Masukkan password"
+                      autoComplete="current-password"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {error ? (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold leading-6 text-red-700">
+                    {error}
+                  </div>
+                ) : null}
+
+                <button
+                  type="submit"
+                  disabled={submitting || authState !== "signed_out"}
+                  className="login-primary-button mt-2 w-full disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <LogIn className="h-4 w-4" aria-hidden="true" />
+                  {submitting ? "Memproses..." : "Masuk ke POS"}
+                </button>
+              </div>
+
               <button
                 type="button"
-                className="w-full text-center text-xs font-semibold text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline"
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 text-xs font-bold text-slate-400 transition hover:text-slate-700"
                 onClick={() => resetBrowserAppStateAndReload({ preserveAuth: false })}
               >
+                <RefreshCcw className="h-3.5 w-3.5" aria-hidden="true" />
                 Bersihkan sesi login
               </button>
             </form>
-          </Panel>
-        </div>
-      </div>
+          </div>
+        </section>
+      </main>
     </div>
   );
 }

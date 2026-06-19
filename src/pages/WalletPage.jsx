@@ -1,4 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  Loader2,
+  Repeat2,
+  Save,
+} from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import PaginationBar from "../components/PaginationBar";
 import PageHeader from "../components/app/PageHeader";
@@ -56,6 +63,30 @@ const initialForm = {
 };
 
 const LOW_BALANCE_THRESHOLD = 50000;
+const QUICK_AMOUNT_CHIPS = [
+  { label: "+50rb", value: 50000 },
+  { label: "+100rb", value: 100000 },
+  { label: "+200rb", value: 200000 },
+  { label: "+500rb", value: 500000 },
+];
+const walletFormPlatforms = walletPlatforms.filter((platform) => platform.value !== "cash");
+const walletMutationMeta = {
+  masuk: {
+    icon: ArrowDownLeft,
+    label: "Masuk",
+    tone: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  },
+  keluar: {
+    icon: ArrowUpRight,
+    label: "Keluar",
+    tone: "bg-rose-50 text-rose-700 ring-rose-200",
+  },
+  transfer_antar: {
+    icon: Repeat2,
+    label: "Transfer",
+    tone: "bg-blue-50 text-blue-700 ring-blue-200",
+  },
+};
 const WALLET_LEDGER_SELECT = [
   "id",
   "platform",
@@ -66,6 +97,23 @@ const WALLET_LEDGER_SELECT = [
   "keterangan",
   "created_at",
 ].join(", ");
+
+function MutationFormSection({ step, title, helper, children, className = "" }) {
+  return (
+    <section className={`rounded-lg bg-slate-50/80 p-3 ring-1 ring-inset ring-slate-200/80 ${className}`}>
+      <div className="mb-2 flex items-start gap-2">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white text-xs font-black text-[var(--brand-gold-strong)] ring-1 ring-inset ring-[var(--brand-gold)]/30">
+          {step}
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-black tracking-tight text-slate-950">{title}</p>
+          {helper ? <p className="mt-0.5 text-xs leading-5 text-slate-500">{helper}</p> : null}
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+}
 
 export default function WalletPage() {
   const location = useLocation();
@@ -120,6 +168,33 @@ export default function WalletPage() {
     : walletLedger.rows;
 
   const requiresTarget = form.jenis === "transfer_antar";
+  const selectedPlatformLabel = walletPlatformLabelMap[form.platform] || form.platform;
+  const selectedTargetLabel = form.platform_tujuan
+    ? walletPlatformLabelMap[form.platform_tujuan] || form.platform_tujuan
+    : "Pilih tujuan";
+  const selectedMutationLabel = walletTransactionTypeLabelMap[form.jenis] || form.jenis;
+  const selectedMutationMeta = walletMutationMeta[form.jenis] || walletMutationMeta.masuk;
+  const SelectedMutationIcon = selectedMutationMeta.icon;
+
+  const updateForm = (patch) => {
+    setForm((prev) => ({ ...prev, ...patch }));
+  };
+
+  const handleMutationTypeChange = (event) => {
+    const jenis = event.target.value;
+    setForm((prev) => ({
+      ...prev,
+      jenis,
+      platform_tujuan: jenis === "transfer_antar" ? prev.platform_tujuan : "",
+    }));
+  };
+
+  const handleQuickAmount = (amount) => {
+    setForm((prev) => ({
+      ...prev,
+      nominal: String(Number(prev.nominal || 0) + amount),
+    }));
+  };
 
   const hydrateWallet = useCallback(async () => {
     walletHydrationRef.current = true;
@@ -305,83 +380,166 @@ export default function WalletPage() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <Panel className="p-6">
+        <Panel className="p-5">
           <h3 className="font-display text-2xl font-bold tracking-tight text-slate-950">
             Mutasi saldo
           </h3>
-          <p className="mt-2 text-sm leading-7 text-slate-600">
+          <p className="mt-1.5 text-sm leading-6 text-slate-600">
             Catat koreksi saldo di sini. Transaksi harian akan ikut membentuk saldo yang tampil.
           </p>
           <form
             onSubmit={handleSubmit}
-            className="mt-5 grid gap-4 md:grid-cols-2"
+            className="mt-4 space-y-3"
           >
-            <select
-              value={form.jenis}
-              onChange={(event) => setForm((prev) => ({ ...prev, jenis: event.target.value }))}
-              className="brand-select"
+            <MutationFormSection
+              step="1"
+              title="Jenis mutasi + platform"
+              helper="Pilih alur dana dan platform asal."
             >
-              {walletTransactionTypes.map((item) => (
-                <option key={item.value} value={item.value} className="bg-white">
-                  {item.label}
-                </option>
-              ))}
-            </select>
-            <select
-              value={form.platform}
-              onChange={(event) => setForm((prev) => ({ ...prev, platform: event.target.value }))}
-              className="brand-select"
-            >
-              {walletPlatforms.filter(platform => platform.value !== 'cash').map((item) => (
-                <option key={item.value} value={item.value} className="bg-white">
-                  {item.label}
-                </option>
-              ))}
-            </select>
-            {requiresTarget ? (
-              <select
-                value={form.platform_tujuan}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, platform_tujuan: event.target.value }))
-                }
-                className="brand-select md:col-span-2"
-              >
-                <option value="" className="bg-white">
-                  Pilih tujuan
-                </option>
-                {walletPlatforms.filter(platform => platform.value !== 'cash').map((item) => (
-                  <option key={item.value} value={item.value} className="bg-white">
+              <div className="grid gap-2 md:grid-cols-2">
+                <label className="space-y-1.5">
+                  <span className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                    Jenis
+                  </span>
+                  <select
+                    value={form.jenis}
+                    onChange={handleMutationTypeChange}
+                    className="brand-select h-10 border-slate-300 bg-white font-semibold"
+                  >
+                    {walletTransactionTypes.map((item) => (
+                      <option key={item.value} value={item.value} className="bg-white">
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                    Platform asal
+                  </span>
+                  <select
+                    value={form.platform}
+                    onChange={(event) => updateForm({ platform: event.target.value })}
+                    className="brand-select h-10 border-slate-300 bg-white font-semibold"
+                  >
+                    {walletFormPlatforms.map((item) => (
+                      <option key={item.value} value={item.value} className="bg-white">
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {requiresTarget ? (
+                  <label className="space-y-1.5 md:col-span-2">
+                    <span className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                      Platform tujuan
+                    </span>
+                    <select
+                      value={form.platform_tujuan}
+                      onChange={(event) => updateForm({ platform_tujuan: event.target.value })}
+                      className="brand-select h-10 border-slate-300 bg-white font-semibold"
+                    >
+                      <option value="" className="bg-white">
+                        Pilih tujuan transfer
+                      </option>
+                      {walletFormPlatforms.map((item) => (
+                        <option key={item.value} value={item.value} className="bg-white">
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md bg-white px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200">
+                <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 ring-1 ring-inset ${selectedMutationMeta.tone}`}>
+                  <SelectedMutationIcon className="h-3.5 w-3.5" />
+                  {selectedMutationMeta.label}
+                </span>
+                <span>{selectedMutationLabel}</span>
+                <span className="text-slate-300">/</span>
+                <span className="text-slate-950">{selectedPlatformLabel}</span>
+                {requiresTarget ? (
+                  <>
+                    <span className="text-slate-300">ke</span>
+                    <span className="text-slate-950">{selectedTargetLabel}</span>
+                  </>
+                ) : null}
+              </div>
+            </MutationFormSection>
+
+            <MutationFormSection step="2" title="Nominal" helper="Isi angka manual atau tambah cepat.">
+              <div className="grid gap-2 md:grid-cols-[1fr_0.72fr]">
+                <label className="space-y-1.5">
+                  <span className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                    Jumlah
+                  </span>
+                  <CurrencyInput
+                    value={form.nominal}
+                    onChange={(value) => updateForm({ nominal: value })}
+                    className="brand-input h-10 border-slate-300 bg-white text-base font-black"
+                    placeholder="Nominal"
+                    required
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                    Biaya admin
+                  </span>
+                  <CurrencyInput
+                    value={form.biaya_admin}
+                    onChange={(value) => updateForm({ biaya_admin: value })}
+                    className="brand-input h-10 border-slate-300 bg-white"
+                    placeholder="Opsional"
+                  />
+                </label>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {QUICK_AMOUNT_CHIPS.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => handleQuickAmount(item.value)}
+                    className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 shadow-sm transition hover:border-[var(--brand-gold)]/60 hover:bg-[var(--brand-surface-tint)] hover:text-slate-950"
+                  >
                     {item.label}
-                  </option>
+                  </button>
                 ))}
-              </select>
-            ) : null}
-            <CurrencyInput
-              value={form.nominal}
-              onChange={(value) => setForm((prev) => ({ ...prev, nominal: value }))}
-              className="brand-input"
-              placeholder="Nominal"
-              required
-            />
-            <CurrencyInput
-              value={form.biaya_admin}
-              onChange={(value) => setForm((prev) => ({ ...prev, biaya_admin: value }))}
-              className="brand-input"
-              placeholder="Biaya admin"
-            />
-            <textarea
-              value={form.keterangan}
-              onChange={(event) => setForm((prev) => ({ ...prev, keterangan: event.target.value }))}
-              className="brand-textarea md:col-span-2"
-              placeholder="Keterangan mutasi"
-            />
-            <button
-              type="submit"
-              disabled={submitting}
-              className="brand-button-success md:col-span-2 disabled:cursor-not-allowed disabled:opacity-60"
+              </div>
+            </MutationFormSection>
+
+            <MutationFormSection
+              step="3"
+              title="Keterangan"
+              helper="Catatan pendek agar riwayat mudah dicek saat closing."
             >
-              {submitting ? "Menyimpan..." : "Simpan Mutasi"}
-            </button>
+              <textarea
+                value={form.keterangan}
+                onChange={(event) => updateForm({ keterangan: event.target.value })}
+                className="brand-textarea min-h-[78px] border-slate-300 bg-white py-2.5"
+                placeholder="Contoh: modal deposit, koreksi saldo, transfer antar platform"
+              />
+            </MutationFormSection>
+
+            <MutationFormSection step="4" title="Aksi simpan" className="bg-white">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="brand-button-success min-h-[44px] w-full shadow-[0_12px_24px_rgba(21,128,61,0.18)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Menyimpan mutasi...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    Simpan Mutasi
+                  </>
+                )}
+              </button>
+            </MutationFormSection>
           </form>
         </Panel>
 

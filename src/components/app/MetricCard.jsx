@@ -12,54 +12,44 @@ export default function MetricCard({
 }) {
   const accentStyles = {
     gold: {
-      badge: "brand-badge",
       value: "text-slate-950",
       helper: "text-slate-500",
-      rail: "bg-[var(--brand-gold)]",
-      icon: "bg-[var(--brand-gold)]/14 text-[var(--brand-gold-strong)]",
+      icon: "bg-slate-100 text-slate-600",
     },
     success: {
-      badge: "brand-badge-success",
       value: "text-[var(--brand-success)]",
       helper: "text-emerald-700",
-      rail: "bg-[var(--brand-success)]",
       icon: "bg-[var(--brand-success-soft)] text-[var(--brand-success)]",
     },
     danger: {
-      badge: "brand-badge-danger",
       value: "text-[var(--brand-danger)]",
       helper: "text-rose-700",
-      rail: "bg-[var(--brand-danger)]",
       icon: "bg-[var(--brand-danger-soft)] text-[var(--brand-danger)]",
     },
     info: {
-      badge: "brand-badge-info",
       value: "text-[var(--brand-info)]",
       helper: "text-blue-700",
-      rail: "bg-[var(--brand-info)]",
-      icon: "bg-[var(--brand-info-soft)] text-[var(--brand-info)]",
+      icon: "bg-slate-100 text-slate-600",
     },
   };
 
   const styles = accentStyles[accent] || accentStyles.gold;
 
   return (
-    <Panel className={`overflow-hidden p-5 ${className}`.trim()}>
+    <Panel className={`overflow-hidden p-4 ${className}`.trim()}>
       <div className="flex items-start justify-between gap-3">
-        <span className={styles.badge}>{label}</span>
+        <span className="text-[11px] font-black uppercase leading-5 tracking-[0.12em] text-slate-500">{label}</span>
         {icon ? (
-          <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${styles.icon}`}>
-            <AppIcon name={icon} className="h-[18px] w-[18px]" />
+          <span className={`flex h-9 w-9 items-center justify-center rounded-md border border-slate-200/70 ${styles.icon}`}>
+            <AppIcon name={icon} className="h-4 w-4" />
           </span>
         ) : trend ? (
           <span className={`brand-trend-chip brand-trend-${trend.tone || "neutral"}`}>
             {trend.label}
           </span>
-        ) : (
-          <span className={`mt-1 h-1.5 w-12 rounded-full ${styles.rail}`} />
-        )}
+        ) : null}
       </div>
-      <p className={`mt-6 text-3xl font-extrabold tracking-tight ${styles.value}`}>{value}</p>
+      <p className={`mt-4 text-2xl font-black tracking-tight ${styles.value}`}>{value}</p>
       {helper || (icon && trend) ? (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {icon && trend ? (

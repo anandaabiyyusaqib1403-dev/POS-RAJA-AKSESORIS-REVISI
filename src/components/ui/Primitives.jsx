@@ -6,15 +6,15 @@ function cx(...classes) {
 
 export function Surface({ children, className = "", variant = "default", as: Component = "section", ...props }) {
   const variants = {
-    default: "bg-[var(--surface)] border-[var(--border-muted)] shadow-[var(--shadow-soft)]",
-    secondary: "bg-[var(--surface-secondary)] border-[var(--border-muted)]",
-    strong: "bg-[var(--surface)] border-[var(--border-strong)] shadow-[var(--shadow-card)]",
+    default: "brand-panel",
+    secondary: "brand-panel brand-panel-muted",
+    strong: "brand-panel brand-panel-strong",
     ghost: "bg-transparent border-transparent shadow-none",
   };
 
   return (
     <Component
-      className={cx("rounded-lg border", variants[variant] || variants.default, className)}
+      className={cx(variants[variant] || variants.default, className)}
       {...props}
     >
       {children}
@@ -82,7 +82,7 @@ export function StatCard({
 export function EmptyState({ title = "Belum ada data", description, icon = "search", action }) {
   return (
     <div className="brand-empty-state brand-empty-state-with-motion">
-      <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-white text-[var(--brand-gold-strong)] shadow-sm">
+      <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-[var(--brand-gold)]/20 bg-white text-[var(--brand-gold-strong)] shadow-sm">
         <AppIcon name={icon} className="h-5 w-5" />
       </span>
       <p className="text-base font-semibold text-[var(--text)]">{title}</p>
@@ -167,7 +167,7 @@ export function Drawer({ open, title, children, onClose, side = "right", classNa
       <button
         type="button"
         aria-label="Tutup panel"
-        className="absolute inset-0 bg-slate-950/30"
+        className="brand-modal-backdrop absolute inset-0"
         onClick={onClose}
       />
       <aside
@@ -200,16 +200,16 @@ export function ModalLayout({ open, title, description, children, footer, onClos
       <button
         type="button"
         aria-label="Tutup modal"
-        className="absolute inset-0 bg-slate-950/35"
+        className="brand-modal-backdrop absolute inset-0"
         onClick={onClose}
       />
       <div
-        className={cx("relative max-h-[90vh] w-full max-w-lg overflow-hidden rounded-lg bg-white shadow-2xl", className)}
+        className={cx("brand-modal-surface relative max-h-[90vh] w-full max-w-lg", className)}
         role="dialog"
         aria-modal="true"
         aria-label={title || "Modal"}
       >
-        <div className="border-b border-[var(--border-muted)] px-6 py-5">
+        <div className="brand-modal-header px-6 py-5">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-lg font-bold text-[var(--text)]">{title}</h2>
@@ -221,7 +221,7 @@ export function ModalLayout({ open, title, description, children, footer, onClos
           </div>
         </div>
         <div className="brand-scrollbar max-h-[64vh] overflow-y-auto px-6 py-5">{children}</div>
-        {footer ? <div className="border-t border-[var(--border-muted)] px-6 py-4">{footer}</div> : null}
+        {footer ? <div className="brand-modal-footer px-6 py-4">{footer}</div> : null}
       </div>
     </div>
   );

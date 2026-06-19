@@ -6,9 +6,9 @@ const Input = ({ label, error, size = "sm", className = "", ...props }) => {
   }[size] || "";
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-2">
       {label && (
-        <label className="block text-sm font-medium text-slate-700">
+        <label className="block text-xs font-black uppercase tracking-[0.12em] text-slate-500">
           {label}
         </label>
       )}
@@ -16,7 +16,7 @@ const Input = ({ label, error, size = "sm", className = "", ...props }) => {
         className={`brand-input ${sizeClass} ${error ? "border-red-500 focus:border-red-500 focus:shadow-none" : ""} ${className}`.trim()}
         {...props}
       />
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-xs font-semibold leading-5 text-red-600">{error}</p>}
     </div>
   );
 };

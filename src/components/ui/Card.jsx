@@ -10,11 +10,11 @@ const Card = ({ children, className = "", ...props }) => {
 };
 
 const CardHeader = ({ children, className = "" }) => (
-  <div className={`mb-4 ${className}`}>{children}</div>
+  <div className={`mb-4 border-b border-[var(--brand-border)] pb-4 ${className}`.trim()}>{children}</div>
 );
 
 const CardTitle = ({ children, className = "" }) => (
-  <h3 className={`text-lg font-semibold text-slate-950 ${className}`}>{children}</h3>
+  <h3 className={`font-display text-lg font-bold tracking-tight text-slate-950 ${className}`.trim()}>{children}</h3>
 );
 
 const CardContent = ({ children, className = "" }) => (

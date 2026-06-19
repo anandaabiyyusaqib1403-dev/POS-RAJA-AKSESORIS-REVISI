@@ -8,23 +8,18 @@ const Button = ({
   ...props
 }) => {
   const baseClasses =
-    "inline-flex max-w-full items-center justify-center gap-2 text-center font-semibold leading-5 transition duration-200 disabled:cursor-not-allowed disabled:opacity-60";
+    "disabled:cursor-not-allowed disabled:opacity-60";
 
   const variants = {
-    primary:
-      "bg-[var(--brand-gold)] text-[#17130a] shadow-[0_8px_18px_rgba(212,175,55,0.18)] hover:bg-[#c9a227]",
-    secondary:
-      "border border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-text)] hover:border-[rgba(212,175,55,0.36)] hover:bg-[var(--brand-surface-tint)]",
-    accent:
-      "bg-[#16a34a] text-white shadow-[0_8px_18px_rgba(22,163,74,0.16)] hover:bg-[#15803d]",
+    primary: "brand-button-primary",
+    secondary: "brand-button-secondary",
+    accent: "brand-button-success",
     outline:
-      "border border-[var(--brand-border)] bg-transparent text-[var(--brand-text)] hover:bg-[var(--surface-hover)]",
-    danger:
-      "bg-[var(--danger)] text-white shadow-[0_8px_18px_rgba(220,38,38,0.16)] hover:bg-rose-700",
-    warning:
-      "bg-[var(--warning)] text-white shadow-[0_8px_18px_rgba(180,83,9,0.16)] hover:bg-amber-800",
+      "inline-flex max-w-full items-center justify-center gap-2 rounded-lg border border-[var(--brand-border)] bg-transparent text-center text-sm font-semibold leading-5 text-[var(--brand-text)] transition hover:border-[rgba(212,175,55,0.36)] hover:bg-[var(--surface-hover)]",
+    danger: "brand-button-danger",
+    warning: "brand-button-warning",
     ghost:
-      "bg-transparent text-[var(--brand-text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--brand-text)]",
+      "inline-flex max-w-full items-center justify-center gap-2 rounded-lg bg-transparent text-center text-sm font-semibold leading-5 text-[var(--brand-text-muted)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--brand-text)]",
   };
 
   const sizes = {

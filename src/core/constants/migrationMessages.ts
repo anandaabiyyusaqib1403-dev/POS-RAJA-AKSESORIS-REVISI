@@ -16,6 +16,9 @@ export const STOCK_OPNAME_MIGRATION_MESSAGE =
 export const SUPPLIER_RETURN_MIGRATION_MESSAGE =
   "Retur barang belum siap dipakai. Minta pemilik toko mengecek pengaturan aplikasi.";
 
+export const WARRANTY_CLAIM_MIGRATION_MESSAGE =
+  "Garansi konsumen belum siap dipakai. Minta pemilik toko mengecek pengaturan aplikasi.";
+
 export const RPC_SCHEMA_CACHE_MESSAGE =
   "Coba muat ulang aplikasi, lalu ulangi sekali lagi.";
 

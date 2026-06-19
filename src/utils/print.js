@@ -625,6 +625,25 @@ function formatReturnReason(value) {
   return reasonLabels[normalizedValue] || normalizedValue.replace(/\b\w/g, (letter) => letter.toUpperCase()) || "-";
 }
 
+function normalizeWarrantyOutcome(value) {
+  const normalizedValue = String(value || "").trim().toLowerCase();
+  if (normalizedValue === "exchange" || normalizedValue === "warranty_exchange") return "exchange";
+  if (normalizedValue === "rejected" || normalizedValue === "ditolak" || normalizedValue === "warranty_rejected") {
+    return "rejected";
+  }
+  return "refund";
+}
+
+function formatWarrantyOutcome(value) {
+  const labels = {
+    exchange: "Tukar Barang",
+    refund: "Refund",
+    rejected: "Ditolak",
+  };
+
+  return labels[normalizeWarrantyOutcome(value)] || "-";
+}
+
 function buildReturnReceiptItems(returnRow, type) {
   const valueKey = type === "customer" ? "unit_price" : "unit_cost";
   const subtotalKey = type === "customer" ? "subtotal_refund" : "subtotal_cost";
@@ -649,29 +668,34 @@ function buildReturnReceiptItems(returnRow, type) {
 
 export function buildReturnReceiptPrintModel(returnRow, type = "supplier") {
   const normalizedType = normalizeReturnReceiptType(type);
+  const isCustomer = normalizedType === "customer";
   const date = normalizeReceiptDate(returnRow?.created_at);
   const items = buildReturnReceiptItems(returnRow, normalizedType);
   const computedTotal = items.reduce((sum, item) => sum + item.subtotal, 0);
   const totalValue = Number(
-    normalizedType === "customer"
+    isCustomer
       ? returnRow?.total_refund_amount ?? computedTotal
       : returnRow?.total_estimated_value ?? computedTotal
   );
   const settlementAmount = Number(returnRow?.settlement_amount || 0);
+  const warrantyOutcome = isCustomer
+    ? normalizeWarrantyOutcome(returnRow?.warranty_outcome || returnRow?.refund_method)
+    : "";
 
   return {
     store: receiptStoreProfile,
     type: normalizedType,
-    title: normalizedType === "customer" ? "BUKTI RETUR KONSUMEN" : "BUKTI RETUR SUPPLIER",
+    title: isCustomer ? "BUKTI GARANSI KONSUMEN" : "BUKTI RETUR SUPPLIER",
+    numberLabel: isCustomer ? "No Klaim" : "No Retur",
     noRetur: returnRow?.no_retur || "RTR-0000",
     dateLabel: date.toLocaleDateString("id-ID"),
     timeLabel: date.toLocaleTimeString("id-ID", {
       hour: "2-digit",
       minute: "2-digit",
     }),
-    partyLabel: normalizedType === "customer" ? "Konsumen" : "Supplier",
+    partyLabel: isCustomer ? "Konsumen" : "Supplier",
     partyName:
-      normalizedType === "customer"
+      isCustomer
         ? returnRow?.customer_name || "-"
         : returnRow?.supplier_name || "-",
     transactionNo: returnRow?.transaction_no || "",
@@ -679,10 +703,16 @@ export function buildReturnReceiptPrintModel(returnRow, type = "supplier") {
     reasonLabel: formatReturnReason(returnRow?.reason),
     condition: String(returnRow?.condition || "").trim(),
     refundMethod: String(returnRow?.refund_method || "").trim(),
+    warrantyOutcome,
+    warrantyOutcomeLabel: isCustomer ? formatWarrantyOutcome(returnRow?.warranty_outcome || returnRow?.refund_method) : "",
     settlementMethod: String(returnRow?.settlement_method || "").trim(),
     settlementAmount,
     settlementNotes: String(returnRow?.settlement_notes || "").trim(),
-    restockLabel: normalizedType === "customer" ? (returnRow?.restock === false ? "Tidak" : "Ya") : "",
+    stockImpactLabel: isCustomer
+      ? warrantyOutcome === "exchange"
+        ? "Stok pengganti keluar"
+        : "Tidak berubah"
+      : "",
     items,
     totalQty: Number(returnRow?.total_quantity || items.reduce((sum, item) => sum + item.qty, 0)),
     totalValue,
@@ -696,7 +726,11 @@ export function generateReturnReceiptHTML(returnRow, type = "supplier", options 
   const receiptWidth = printerProfile.widthPx;
   const fontSize = printerProfile.fontSizePx;
   const amountLabel = receipt.type === "customer" ? "Total Refund" : "Estimasi Nilai";
-  const methodLabel = receipt.type === "customer" ? "Metode Refund" : "Penyelesaian";
+  const methodLabel = receipt.type === "customer" ? "Hasil Klaim" : "Penyelesaian";
+  const totalValueLabel =
+    receipt.type === "customer" && receipt.warrantyOutcome !== "refund"
+      ? "-"
+      : formatRupiah(receipt.totalValue);
 
   const itemMarkup = receipt.items.length
     ? receipt.items
@@ -734,7 +768,9 @@ export function generateReturnReceiptHTML(returnRow, type = "supplier", options 
     : "";
   const methodValue =
     receipt.type === "customer"
-      ? receipt.refundMethod || "-"
+      ? receipt.warrantyOutcome === "refund"
+        ? `Refund - ${formatReceiptPaymentMethod(receipt.refundMethod || "cash")}`
+        : receipt.warrantyOutcomeLabel
       : receipt.settlementMethod || receipt.statusLabel;
   const settlementMarkup =
     receipt.type === "supplier" && receipt.settlementAmount > 0
@@ -742,7 +778,7 @@ export function generateReturnReceiptHTML(returnRow, type = "supplier", options 
       : "";
   const restockMarkup =
     receipt.type === "customer"
-      ? `<div class="summary-row"><span>Restock</span><span>${escapeHtml(receipt.restockLabel)}</span></div>`
+      ? `<div class="summary-row"><span>Dampak Stok</span><span>${escapeHtml(receipt.stockImpactLabel)}</span></div>`
       : "";
   const conditionMarkup = receipt.condition
     ? `<div class="meta-row"><span>Kondisi</span><span>${escapeHtml(receipt.condition)}</span></div>`
@@ -983,7 +1019,7 @@ export function generateReturnReceiptHTML(returnRow, type = "supplier", options 
     </header>
 
     <section class="meta-card">
-      <div class="meta-row"><span>No Retur</span><span>${escapeHtml(receipt.noRetur)}</span></div>
+      <div class="meta-row"><span>${escapeHtml(receipt.numberLabel)}</span><span>${escapeHtml(receipt.noRetur)}</span></div>
       <div class="meta-row"><span>Tanggal</span><span>${escapeHtml(receipt.dateLabel)}</span></div>
       <div class="meta-row"><span>Jam</span><span>${escapeHtml(receipt.timeLabel)}</span></div>
       <div class="meta-row"><span>${escapeHtml(receipt.partyLabel)}</span><span>${escapeHtml(receipt.partyName)}</span></div>
@@ -1003,7 +1039,7 @@ export function generateReturnReceiptHTML(returnRow, type = "supplier", options 
       <div class="separator"></div>
       <div class="summary-row"><span>Total QTY</span><span>${escapeHtml(receipt.totalQty)} pcs</span></div>
       <div class="total-card">
-        <div class="summary-row total-row"><span>${escapeHtml(amountLabel)}</span><span>${escapeHtml(formatRupiah(receipt.totalValue))}</span></div>
+        <div class="summary-row total-row"><span>${escapeHtml(amountLabel)}</span><span>${escapeHtml(totalValueLabel)}</span></div>
       </div>
       ${settlementMarkup}
       ${restockMarkup}
@@ -1012,7 +1048,7 @@ export function generateReturnReceiptHTML(returnRow, type = "supplier", options 
     ${noteMarkup}
 
     <footer class="footer">
-      <div>Dokumen bukti retur barang</div>
+      <div>${receipt.type === "customer" ? "Dokumen bukti klaim garansi" : "Dokumen bukti retur barang"}</div>
       <div>Simpan sebagai arsip toko</div>
       <div class="receipt-mark">RAJA POS</div>
     </footer>
@@ -1025,13 +1061,14 @@ export function generateReturnReceiptHTML(returnRow, type = "supplier", options 
 
 export function printReturnReceiptWithStatus(returnRow, type = "supplier", existingWindow = null, options = {}) {
   const printerProfile = getReceiptPrinterProfile(options);
+  const documentLabel = normalizeReturnReceiptType(type) === "customer" ? "garansi" : "retur";
   const printWindow = existingWindow || openReceiptPrintWindow(options);
   if (!printWindow) {
     return createPrintResult({
       blocked: true,
       transactionId: returnRow?.id || returnRow?.no_retur || null,
       printerProfile: printerProfile.id,
-      message: "Popup print retur diblokir browser.",
+      message: `Popup print ${documentLabel} diblokir browser.`,
     });
   }
 
@@ -1049,7 +1086,7 @@ export function printReturnReceiptWithStatus(returnRow, type = "supplier", exist
       status: "opened",
       transactionId: returnRow?.id || returnRow?.no_retur || null,
       printerProfile: printerProfile.id,
-      message: "Jendela cetak retur sudah dibuka.",
+      message: `Jendela cetak ${documentLabel} sudah dibuka.`,
     });
   } catch (error) {
     try {
@@ -1060,7 +1097,7 @@ export function printReturnReceiptWithStatus(returnRow, type = "supplier", exist
     return createPrintResult({
       transactionId: returnRow?.id || returnRow?.no_retur || null,
       printerProfile: printerProfile.id,
-      message: error?.message || "Jendela cetak retur gagal disiapkan.",
+      message: error?.message || `Jendela cetak ${documentLabel} gagal disiapkan.`,
     });
   }
 }

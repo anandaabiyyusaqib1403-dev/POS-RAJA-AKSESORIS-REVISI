@@ -72,9 +72,9 @@ export default function SecurityActionModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-      <div className="brand-success-popover w-full max-w-md rounded-lg border border-white/70 bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
+    <div className="brand-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="brand-modal-surface brand-success-popover w-full max-w-md">
+        <div className="brand-modal-header flex items-start justify-between gap-4 p-5">
           <div className="flex min-w-0 items-start gap-3">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-950 text-[var(--brand-gold)] shadow-lg">
               {request.employeeName ? (
@@ -98,7 +98,7 @@ export default function SecurityActionModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 hover:text-slate-950"
+            className="brand-icon-button brand-icon-button-sm brand-icon-button-muted"
             aria-label="Tutup security modal"
           >
             <X className="h-4 w-4" />
@@ -189,7 +189,7 @@ export default function SecurityActionModal({
               <textarea
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
-                className="brand-input mt-2 min-h-[84px] resize-none text-sm"
+                className="brand-textarea mt-2 min-h-[84px] resize-none text-sm"
                 placeholder="Opsional, tapi berguna untuk audit."
               />
             </label>

@@ -40,8 +40,8 @@ export const routeMeta = {
     description: "Cocokkan stok fisik dengan catatan barang sebelum penyesuaian.",
   },
   "/retur-supplier": {
-    title: "Retur Barang",
-    description: "Kelola retur supplier dan retur konsumen dengan dampak stok yang jelas.",
+    title: "Retur & Garansi",
+    description: "Kelola retur supplier dan klaim garansi konsumen dengan dampak stok yang jelas.",
   },
   "/history-produk": {
     title: "History Produk",

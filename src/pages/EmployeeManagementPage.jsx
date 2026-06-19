@@ -45,6 +45,7 @@ import {
   formatPlainNumber,
   formatRupiah,
 } from "../utils/format";
+import { CASHIER_STATIONS } from "../utils/shift";
 import {
   buildEmployeeDailyPerformance,
   buildEmployees,
@@ -65,6 +66,11 @@ const roleOptions = [
   { value: "all", label: "Semua role" },
   { value: "pemilik", label: "Pemilik" },
   { value: "kasir", label: "Kasir" },
+];
+
+const cashierStationOptions = [
+  { value: "", label: "Belum ditentukan" },
+  ...CASHIER_STATIONS.map((station) => ({ value: station, label: station })),
 ];
 
 const statusOptions = [
@@ -589,6 +595,7 @@ function EmployeeFormModal({ employee, onClose, onSave, submitting = false }) {
     username: employee?.username || "",
     phone: employee?.phone === "-" ? "" : employee?.phone || "",
     role: employee?.role || "kasir",
+    cashierStation: employee?.cashierStation || employee?.cashier_station || "",
     password: "",
     pin: "",
     baseSalary: String(employee?.baseSalary ?? 1800000),
@@ -676,6 +683,7 @@ function EmployeeFormModal({ employee, onClose, onSave, submitting = false }) {
       password: form.password,
       phone: form.phone.trim(),
       role: form.role,
+      cashierStation: form.cashierStation,
       pin: form.pin,
       baseSalary: Number(form.baseSalary || 0),
       defaultBonus: Number(form.bonus || 0),
@@ -876,6 +884,23 @@ function EmployeeFormModal({ employee, onClose, onSave, submitting = false }) {
                   >
                     <option value="kasir">Kasir</option>
                     <option value="pemilik">Pemilik</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="employee-cashier-station" className="block text-sm font-semibold text-slate-700">
+                    Pos Kasir
+                  </label>
+                  <select
+                    id="employee-cashier-station"
+                    value={form.cashierStation}
+                    onChange={(event) => updateField("cashierStation", event.target.value)}
+                    className={employeeFormSelectClass}
+                  >
+                    {cashierStationOptions.map((option) => (
+                      <option key={option.value || "none"} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1141,6 +1166,7 @@ function EmployeeDrawer({
                   </div>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <MiniStat label="Nomor HP" value={employee.phone} />
+                    <MiniStat label="Pos Kasir" value={employee.cashierStation || "Belum ditentukan"} />
                     <MiniStat label="Bergabung" value={formatDisplayDate(employee.joinedAt)} />
                     <MiniStat label="Shift aktif" value={activeShift ? "Aktif" : "Tidak aktif"} />
                     <MiniStat
@@ -1274,7 +1300,7 @@ function EmployeeDrawer({
                 <div className="mb-4 flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-black text-slate-950">Performa karyawan</p>
-                    <p className="text-xs text-slate-500">Analytics ringan 7 hari, tanpa chart besar.</p>
+                      <p className="text-xs text-slate-500">Ringkasan 7 hari tanpa grafik besar.</p>
                   </div>
                   <Gauge className="h-5 w-5 text-[var(--brand-gold-strong)]" />
                 </div>
@@ -2133,12 +2159,13 @@ export default function EmployeeManagementPage() {
             <>
               <div className="hidden md:block">
                 <div className="brand-scrollbar overflow-x-auto">
-                  <table className="brand-table min-w-[1080px] table-fixed">
+                  <table className="brand-table min-w-[1180px] table-fixed">
                     <colgroup>
-                      <col className="w-[27%]" />
-                      <col className="w-[18%]" />
+                      <col className="w-[24%]" />
+                      <col className="w-[16%]" />
                       <col className="w-[12%]" />
-                      <col className="w-[15%]" />
+                      <col className="w-[11%]" />
+                      <col className="w-[14%]" />
                       <col className="w-[11%]" />
                       <col className="w-[12%]" />
                       <col className="w-[5%]" />
@@ -2148,6 +2175,7 @@ export default function EmployeeManagementPage() {
                         <th className="px-4 py-2.5">Staff</th>
                         <th className="px-4 py-2.5">Status</th>
                         <th className="px-4 py-2.5">Shift</th>
+                        <th className="px-4 py-2.5">Station</th>
                         <th className="px-4 py-2.5">Sales Today</th>
                         <th className="px-4 py-2.5">Device</th>
                         <th className="px-4 py-2.5">Last Seen</th>
@@ -2193,6 +2221,11 @@ export default function EmployeeManagementPage() {
                               <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">
                                 {employee.shift}
                               </p>
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-black text-slate-700">
+                                {employee.cashierStation || "Belum ditentukan"}
+                              </span>
                             </td>
                             <td className="px-4 py-2.5">
                               <p className="font-black text-slate-950">{formatRupiah(metrics.revenue)}</p>
@@ -2280,7 +2313,7 @@ export default function EmployeeManagementPage() {
                           </div>
                           <div className="mt-3 grid grid-cols-3 gap-2">
                             <MiniStat label="Role" value={getRoleLabel(employee.role)} />
-                            <MiniStat label="Shift" value={employee.shift} />
+                            <MiniStat label="Station" value={employee.cashierStation || "Belum"} />
                             <MiniStat label="Penjualan" value={formatRupiah(metrics.revenue)} />
                           </div>
                           <p className="mt-2 truncate text-xs font-semibold text-slate-500">

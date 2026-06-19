@@ -161,23 +161,23 @@ function buildOperationalInsights({ profitRows, slowMovingRows, supplierRows, su
   if (topProduct?.profit > 0) {
     insights.push({
       tone: "success",
-      title: "Prioritaskan produk profit tinggi",
-      detail: `${topProduct.nama} sedang menjadi kontributor profit teratas. Pastikan stok dan display tetap aman.`,
+      title: "Prioritaskan produk laba tinggi",
+      detail: `${topProduct.nama} sedang menjadi kontributor laba teratas. Pastikan stok dan etalase tetap aman.`,
     });
   }
 
   if (highestStockRisk) {
     insights.push({
       tone: "warning",
-      title: "Modal tertahan di slow moving stock",
-      detail: `${highestStockRisk.nama} punya nilai stok tertahan terbesar. Pertimbangkan bundling atau promo ringan.`,
+      title: "Modal tertahan di stok lambat",
+      detail: `${highestStockRisk.nama} punya nilai stok tertahan terbesar. Pertimbangkan paket penjualan atau promo ringan.`,
     });
   }
 
   if (topSupplier?.produk) {
     insights.push({
       tone: "info",
-      title: "Supplier paling efisien",
+      title: "Pemasok paling efisien",
       detail: `${topSupplier.supplier} mencatat margin ${topSupplier.marginPercent.toFixed(1)}% dari ${topSupplier.produk} produk.`,
     });
   }

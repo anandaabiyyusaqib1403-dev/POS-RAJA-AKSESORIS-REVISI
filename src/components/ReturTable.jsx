@@ -12,6 +12,10 @@ import {
 } from "lucide-react";
 import PaginationBar from "./PaginationBar";
 import Panel from "./app/Panel";
+import {
+  getWarrantyOutcome,
+  getWarrantyOutcomeLabel,
+} from "../features/returns/services/returnReports";
 
 export default function ReturTable({
   type,
@@ -39,6 +43,7 @@ export default function ReturTable({
   pagination,
 }) {
   const isCustomer = type === "customer";
+  const documentLabel = isCustomer ? "Garansi Konsumen" : "Retur Supplier";
   const matchingCount = Math.max(pagination?.count || 0, rows.length);
   const activeFilters = [
     search.trim()
@@ -78,14 +83,14 @@ export default function ReturTable({
           <div>
             <div className="flex flex-wrap items-center gap-3">
               <h2 className="font-display text-xl font-bold tracking-tight text-slate-950">
-                Riwayat Retur {isCustomer ? "Konsumen" : "Supplier"}
+                Riwayat {documentLabel}
               </h2>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600">
                 {matchingCount} catatan
               </span>
             </div>
             <p className="mt-1 text-sm text-slate-500">
-              Scan nomor retur, pantau status, atau buka bukti transaksi dengan cepat.
+              Scan nomor {isCustomer ? "klaim" : "retur"}, pantau status, atau buka bukti transaksi dengan cepat.
             </p>
           </div>
           <button type="button" onClick={onExport} className="brand-button-success w-full gap-2 sm:w-auto">
@@ -132,7 +137,7 @@ export default function ReturTable({
                 onChange={(event) => setSearch(event.target.value)}
                 onKeyDown={onSearchKeyDown}
                 className="input pl-9"
-                placeholder="Scan / cari no retur"
+                placeholder={`Scan / cari no ${isCustomer ? "klaim" : "retur"}`}
               />
             </div>
             {!isCustomer ? (
@@ -189,7 +194,7 @@ export default function ReturTable({
             </div>
           ) : (
             <p className="mt-4 border-t border-slate-200 pt-4 text-xs text-slate-500">
-              Menampilkan semua retur. Pilih periode atau status untuk mempersempit arsip.
+              Menampilkan semua {isCustomer ? "garansi" : "retur"}. Pilih periode atau status untuk mempersempit arsip.
             </p>
           )}
         </div>
@@ -199,13 +204,13 @@ export default function ReturTable({
         <table className="brand-table min-w-[920px]">
           <thead>
             <tr>
-              <th>No Retur</th>
+              <th>{isCustomer ? "No Klaim" : "No Retur"}</th>
               <th>{isCustomer ? "Transaksi" : "Supplier"}</th>
               {isCustomer ? <th>Konsumen</th> : null}
               <th>Produk</th>
               {!isCustomer ? <th>Alasan</th> : null}
-              <th>{isCustomer ? "Refund" : "Nilai"}</th>
-              <th>{isCustomer ? "Restock" : "Status"}</th>
+              <th>{isCustomer ? "Nilai Refund" : "Nilai"}</th>
+              <th>{isCustomer ? "Hasil Klaim" : "Status"}</th>
               <th className="brand-table-action-cell text-right">Aksi</th>
             </tr>
           </thead>
@@ -213,6 +218,8 @@ export default function ReturTable({
             {rows.length ? (
               rows.map((row) => {
                 const firstItem = row.items?.[0];
+                const warrantyOutcome = isCustomer ? getWarrantyOutcome(row) : "";
+                const warrantyOutcomeLabel = isCustomer ? getWarrantyOutcomeLabel(row) : "";
 
                 return (
                   <tr key={row.id} className="group transition-colors hover:bg-amber-50/40">
@@ -235,19 +242,23 @@ export default function ReturTable({
                     </td>
                     {!isCustomer ? <td className="text-slate-600">{getReasonLabel(row.reason)}</td> : null}
                     <td className="font-semibold text-slate-950">
-                      {formatRupiah(isCustomer ? row.total_refund_amount : row.total_estimated_value)}
+                      {isCustomer && warrantyOutcome !== "refund"
+                        ? "-"
+                        : formatRupiah(isCustomer ? row.total_refund_amount : row.total_estimated_value)}
                     </td>
                     <td>
                       {isCustomer ? (
                         <span
                           className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${
-                            row.restock
+                            warrantyOutcome === "exchange"
                               ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                              : "border-slate-200 bg-slate-100 text-slate-600"
+                              : warrantyOutcome === "rejected"
+                                ? "border-rose-200 bg-rose-50 text-rose-700"
+                                : "border-sky-200 bg-sky-50 text-sky-700"
                           }`}
                         >
                           <PackageCheck className="h-3.5 w-3.5" aria-hidden="true" />
-                          {row.restock ? "Stok kembali" : "Tidak restock"}
+                          {warrantyOutcomeLabel}
                         </span>
                       ) : (
                         <StatusBadge status={row.status} />
@@ -297,12 +308,12 @@ export default function ReturTable({
                       <PackageCheck className="h-7 w-7" aria-hidden="true" />
                     </span>
                     <p className="font-display text-lg font-bold text-slate-950">
-                      Belum ada retur {isCustomer ? "konsumen" : "supplier"}
+                      Belum ada {isCustomer ? "klaim garansi" : "retur supplier"}
                     </p>
                     <p className="mt-2 text-sm leading-6 text-slate-500">
                       {activeFilters.length
-                        ? "Tidak ada catatan yang cocok dengan filter aktif. Reset filter atau catat retur baru."
-                        : "Retur baru akan muncul di sini lengkap dengan nilai dan status operasionalnya."}
+                        ? "Tidak ada catatan yang cocok dengan filter aktif. Reset filter atau catat dokumen baru."
+                        : `${isCustomer ? "Klaim garansi" : "Retur supplier"} baru akan muncul di sini lengkap dengan nilai dan status operasionalnya.`}
                     </p>
                     <div className="mt-5 flex flex-wrap justify-center gap-2">
                       <button type="button" onClick={resetFilters} className="brand-button-secondary gap-2">
@@ -311,7 +322,7 @@ export default function ReturTable({
                       </button>
                       <button type="button" onClick={onCreate} className="brand-button-primary gap-2">
                         <PackageCheck className="h-4 w-4" aria-hidden="true" />
-                        Buat Retur {isCustomer ? "Konsumen" : "Supplier"}
+                        {isCustomer ? "Buat Klaim Garansi" : "Buat Retur Supplier"}
                       </button>
                     </div>
                   </div>

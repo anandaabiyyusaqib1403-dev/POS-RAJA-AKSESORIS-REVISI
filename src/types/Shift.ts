@@ -3,6 +3,12 @@ export type ShiftStatus = "active" | "pending" | "approved" | "approved_with_cor
 export interface Shift {
   id?: string;
   cashier_id?: string | null;
+  employee_id?: string | null;
+  employee_name?: string;
+  cashier_station?: string;
+  station_code?: string;
+  station_name?: string;
+  shift_type?: string;
   start_time?: string;
   end_time?: string | null;
   opening_cash?: number;

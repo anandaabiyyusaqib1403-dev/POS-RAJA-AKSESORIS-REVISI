@@ -30,6 +30,8 @@ import {
   calculateShiftMetrics,
   canCloseShift,
   canOpenShift,
+  normalizeCashierStation,
+  normalizeShiftType,
   findActiveShift,
   isShiftExpiredByAutoClose,
 } from "../utils/shift";
@@ -39,6 +41,7 @@ import {
   SERVICE_PRODUCT_STALE_MESSAGE,
   SHIFT_SCHEMA_HOTFIX_MESSAGE,
   SUPPLIER_RETURN_MIGRATION_MESSAGE,
+  WARRANTY_CLAIM_MIGRATION_MESSAGE,
 } from "../core/constants/migrationMessages";
 import {
   createSupabaseError,
@@ -221,6 +224,27 @@ const USER_SELECT = [
   "username",
   "phone",
   "role",
+  "cashier_station",
+  "station_code",
+  "station_name",
+  "status",
+  "pin_hash",
+  "base_salary",
+  "default_bonus",
+  "default_deduction",
+  "last_login",
+  "last_device",
+  "archived_at",
+  "created_at",
+  "updated_at",
+].join(", ");
+const USER_SELECT_FALLBACK = [
+  "id",
+  "nama",
+  "email",
+  "username",
+  "phone",
+  "role",
   "status",
   "pin_hash",
   "base_salary",
@@ -248,6 +272,36 @@ const EMPLOYEE_PAYROLL_SELECT = [
 ].join(", ");
 const APP_SETTING_SELECT = "key, value, updated_by, updated_at";
 const SHIFT_SELECT = [
+  "id",
+  "cashier_id",
+  "employee_id",
+  "employee_name",
+  "cashier_station",
+  "station_code",
+  "station_name",
+  "shift_type",
+  "start_time",
+  "end_time",
+  "opening_cash",
+  "total_cash",
+  "total_digital",
+  "digital_breakdown",
+  "total_transactions",
+  "total_items",
+  "actual_cash",
+  "expected_cash",
+  "difference",
+  "notes",
+  "approval_notes",
+  "status",
+  "approved_by",
+  "approved_at",
+  "correction_difference",
+  "correction_type",
+  "closed_by",
+  "created_at",
+].join(", ");
+const SHIFT_SELECT_FALLBACK = [
   "id",
   "cashier_id",
   "start_time",
@@ -800,17 +854,40 @@ export function DataProvider({
       return;
     }
 
-    const usersRes = await supabase
+    let usersRes = await supabase
       .from("users")
       .select(USER_SELECT)
       .is("archived_at", null)
       .order("nama", { ascending: true });
+    if (isMissingColumnError(usersRes.error, ["cashier_station", "station_code", "station_name"])) {
+      usersRes = await supabase
+        .from("users")
+        .select(USER_SELECT_FALLBACK)
+        .is("archived_at", null)
+        .order("nama", { ascending: true });
+    }
 
-    const shiftsRes = await supabase
+    let shiftsRes = await supabase
       .from("shifts")
       .select(SHIFT_SELECT)
       .order("start_time", { ascending: false })
       .limit(DATA_LOAD_LIMITS.shifts);
+    if (
+      isMissingColumnError(shiftsRes.error, [
+        "employee_id",
+        "employee_name",
+        "cashier_station",
+        "station_code",
+        "station_name",
+        "shift_type",
+      ])
+    ) {
+      shiftsRes = await supabase
+        .from("shifts")
+        .select(SHIFT_SELECT_FALLBACK)
+        .order("start_time", { ascending: false })
+        .limit(DATA_LOAD_LIMITS.shifts);
+    }
 
     if (requestVersion !== shiftRefreshVersionRef.current) return;
 
@@ -1827,6 +1904,8 @@ export function DataProvider({
           id: user.id,
           nama: user.nama,
           role: user.role,
+          cashier_station: user.cashier_station || "",
+          station_name: user.station_name || user.cashier_station || "",
         },
       ];
     }
@@ -1836,9 +1915,14 @@ export function DataProvider({
 
   const shifts = useMemo(() => {
     const nameMap = new Map(staffUsers.map((item) => [item.id, item.nama]));
+    const userMap = new Map(staffUsers.map((item) => [item.id, item]));
 
     return shiftRecords
       .map((shift) => {
+        const staffUser = userMap.get(shift.cashier_id);
+        const cashierStation = normalizeCashierStation(
+          shift.cashier_station || staffUser?.cashier_station || staffUser?.station_name
+        );
         const metrics = calculateShiftMetrics({
           shiftId: shift.id,
           accessoryTransactions,
@@ -1869,6 +1953,11 @@ export function DataProvider({
           digital_breakdown: digitalBreakdown || {},
           expected_cash: expectedCash,
           difference,
+          employee_id: shift.employee_id || shift.cashier_id,
+          employee_name: shift.employee_name || nameMap.get(shift.cashier_id) || formatCashierName(shift.cashier_id),
+          cashier_station: cashierStation,
+          station_name: shift.station_name || cashierStation,
+          shift_type: normalizeShiftType(shift.shift_type),
           cashier_name: nameMap.get(shift.cashier_id) || formatCashierName(shift.cashier_id),
           approved_by_name: shift.approved_by ? nameMap.get(shift.approved_by) || null : null,
           closed_by_name: shift.closed_by ? nameMap.get(shift.closed_by) || null : null,
@@ -1962,16 +2051,25 @@ export function DataProvider({
   }, [getActiveShiftForCashier, operatingCashierId, user]);
 
   const startShift = useCallback(
-    async ({ cashierId } = {}) => {
+    async ({ cashierId, cashierStation, shiftType } = {}) => {
       if (!user) {
         throw new Error("User belum login.");
       }
 
       const targetCashierId =
         user.role === "pemilik" ? cashierId || operatingCashierId || cashierUsers[0]?.id : user.id;
+      const targetCashier = cashierUsers.find((cashier) => cashier.id === targetCashierId);
+      const targetCashierStation = normalizeCashierStation(
+        cashierStation || targetCashier?.cashier_station || targetCashier?.station_name
+      );
+      const targetShiftType = normalizeShiftType(shiftType);
 
       if (!targetCashierId) {
         throw new Error("Pilih kasir yang akan memulai shift.");
+      }
+
+      if (!targetCashierStation) {
+        throw new Error("Pos kasir wajib dipilih sebelum shift dibuka.");
       }
 
       if (!canOpenShift(user.role)) {
@@ -1982,9 +2080,24 @@ export function DataProvider({
         throw new Error("Masih ada shift aktif untuk kasir ini.");
       }
 
+      const activeStationShift = activeShifts.find(
+        (shift) => normalizeCashierStation(shift.cashier_station) === targetCashierStation
+      );
+      if (activeStationShift) {
+        throw new Error(`${targetCashierStation} masih digunakan oleh shift aktif.`);
+      }
+
+      const cashierName = targetCashier?.nama || formatCashierName(targetCashierId);
+
       const nextShift = normalizeShiftRecord({
         id: crypto.randomUUID(),
         cashier_id: targetCashierId,
+        employee_id: targetCashierId,
+        employee_name: cashierName,
+        cashier_station: targetCashierStation,
+        station_code: targetCashierStation.toLowerCase().replace(/\s+/g, "_"),
+        station_name: targetCashierStation,
+        shift_type: targetShiftType,
         start_time: new Date().toISOString(),
         end_time: null,
         opening_cash: 0,
@@ -2012,6 +2125,12 @@ export function DataProvider({
           .from("shifts")
           .insert({
             cashier_id: nextShift.cashier_id,
+            employee_id: nextShift.employee_id,
+            employee_name: nextShift.employee_name,
+            cashier_station: nextShift.cashier_station,
+            station_code: nextShift.station_code,
+            station_name: nextShift.station_name,
+            shift_type: nextShift.shift_type,
             start_time: nextShift.start_time,
             opening_cash: 0,
             status: "active",
@@ -2022,8 +2141,11 @@ export function DataProvider({
         if (result.error?.code === "42P01") {
           throw new Error("Shift belum siap dipakai. Minta pemilik toko mengecek pengaturan aplikasi.");
         }
+        if (isMissingColumnError(result.error, ["cashier_station", "shift_type", "employee_id", "employee_name"])) {
+          throw new Error("Schema multi-kasir belum aktif. Jalankan migration cashier station sebelum membuka shift.");
+        }
         if (result.error?.code === "23505") {
-          throw new Error("Kasir ini sudah memiliki shift aktif.");
+          throw new Error(`${targetCashierStation} masih digunakan oleh shift aktif.`);
         }
         if (result.error) throw result.error;
         return result;
@@ -2034,14 +2156,13 @@ export function DataProvider({
       }
 
       const savedShift = normalizeShiftRecord(data || nextShift);
-      const cashierName =
-        cashierUsers.find((cashier) => cashier.id === targetCashierId)?.nama ||
-        formatCashierName(targetCashierId);
       let whatsapp_notification = null;
       try {
         whatsapp_notification = await postShiftWhatsappNotification("opening", {
           shiftId: savedShift.id,
           kasir: cashierName,
+          station: targetCashierStation,
+          shiftType: targetShiftType,
           timestamp: savedShift.start_time,
           requestedByRole: user.role,
           ownerOverride: user.role === "pemilik",
@@ -2061,6 +2182,7 @@ export function DataProvider({
       };
     },
     [
+      activeShifts,
       cashierUsers,
       getActiveShiftForCashier,
       loadData,
@@ -2167,6 +2289,8 @@ export function DataProvider({
         whatsapp_notification = await postShiftWhatsappNotification("closing", {
           shiftId: targetShift.id,
           kasir: targetShift.cashier_name || formatCashierName(targetShift.cashier_id),
+          station: targetShift.cashier_station,
+          shiftType: targetShift.shift_type,
           openedAt: targetShift.start_time,
           timestamp: savedShift.end_time,
           requestedByRole: user.role,
@@ -2245,16 +2369,35 @@ export function DataProvider({
         throw new Error("Hanya pemilik yang dapat mengubah karyawan.");
       }
 
-      const { data, error } = await supabase.rpc("owner_update_employee_profile", {
+      let { data, error } = await supabase.rpc("owner_update_employee_profile", {
         p_user_id: employeeId,
         p_nama: payload.name || payload.nama,
         p_username: payload.username,
         p_phone: payload.phone || "",
         p_role: payload.role || "kasir",
+        p_cashier_station: normalizeCashierStation(payload.cashierStation || payload.cashier_station),
         p_base_salary: Number(payload.baseSalary ?? payload.base_salary ?? 0),
         p_default_bonus: Number(payload.defaultBonus ?? payload.default_bonus ?? 0),
         p_default_deduction: Number(payload.defaultDeduction ?? payload.default_deduction ?? 0),
       });
+
+      if (
+        error &&
+        getSupabaseErrorText(error).includes("p_cashier_station")
+      ) {
+        const fallback = await supabase.rpc("owner_update_employee_profile", {
+          p_user_id: employeeId,
+          p_nama: payload.name || payload.nama,
+          p_username: payload.username,
+          p_phone: payload.phone || "",
+          p_role: payload.role || "kasir",
+          p_base_salary: Number(payload.baseSalary ?? payload.base_salary ?? 0),
+          p_default_bonus: Number(payload.defaultBonus ?? payload.default_bonus ?? 0),
+          p_default_deduction: Number(payload.defaultDeduction ?? payload.default_deduction ?? 0),
+        });
+        data = fallback.data;
+        error = fallback.error;
+      }
 
       if (error) throw new Error(toClientMessage(error.message, "Gagal mengubah karyawan."));
       await Promise.all([refreshShiftData(), refreshEmployeePayrollData()]);
@@ -4435,6 +4578,195 @@ export function DataProvider({
     ]
   );
 
+  const createWarrantyClaim = useCallback(
+    async ({
+      transactionId,
+      customerName,
+      reason,
+      condition,
+      notes,
+      claimOutcome = "exchange",
+      refundMethod,
+      replacementProductId,
+      replacementQuantity,
+      items,
+    }) => {
+      requireOwnerProductAccess();
+
+      const normalizedOutcome = ["exchange", "refund", "rejected"].includes(claimOutcome)
+        ? claimOutcome
+        : "exchange";
+      const transaction = accessoryTransactions.find((row) => row.id === transactionId);
+      if (!transaction) {
+        throw new Error("Transaksi asal tidak ditemukan.");
+      }
+
+      const replacementProduct =
+        normalizedOutcome === "exchange"
+          ? products.find((product) => product.id === replacementProductId)
+          : null;
+      const replacementQty = Math.max(0, toSafeInteger(replacementQuantity || 0));
+
+      if (normalizedOutcome === "exchange") {
+        if (!replacementProduct) {
+          throw new Error("Produk pengganti wajib dipilih.");
+        }
+        if (replacementProduct.status === productStatuses.deleted || replacementProduct.aktif === false) {
+          throw new Error("Produk pengganti tidak aktif.");
+        }
+        if (replacementQty <= 0) {
+          throw new Error("Qty produk pengganti wajib lebih besar dari 0.");
+        }
+        if (Number(replacementProduct.stok || 0) < replacementQty) {
+          throw new Error(`Stok ${replacementProduct.nama} tidak cukup untuk klaim garansi.`);
+        }
+      }
+
+      if (normalizedOutcome === "rejected" && !String(notes || "").trim()) {
+        throw new Error("Catatan wajib diisi saat klaim ditolak.");
+      }
+
+      const claimItems = (Array.isArray(items) ? items : [])
+        .map((item) => {
+          const transactionItem = (transaction.items || []).find(
+            (entry) => entry.id === item.transactionItemId
+          );
+          if (!transactionItem) {
+            throw new Error("Item transaksi garansi tidak ditemukan.");
+          }
+
+          const quantity = Math.max(0, toSafeInteger(item.quantity || 0));
+          if (quantity <= 0) {
+            throw new Error(`Qty klaim ${transactionItem.nama_produk} wajib lebih besar dari 0.`);
+          }
+
+          if (normalizedOutcome !== "rejected") {
+            const alreadyClaimed = customerReturns.reduce((sum, row) => {
+              if (row.refund_method === "warranty_rejected") return sum;
+              return (
+                sum +
+                (row.items || [])
+                  .filter((returnItem) => returnItem.transaction_item_id === transactionItem.id)
+                  .reduce((itemSum, returnItem) => itemSum + Number(returnItem.quantity || 0), 0)
+              );
+            }, 0);
+
+            if (quantity + alreadyClaimed > Number(transactionItem.qty || 0)) {
+              throw new Error(`Qty klaim ${transactionItem.nama_produk} melebihi qty transaksi.`);
+            }
+          }
+
+          return {
+            transaction_item_id: transactionItem.id,
+            product_id: transactionItem.produk_id,
+            product_name: transactionItem.nama_produk,
+            quantity,
+            unit_price: Math.max(0, toSafeInteger(item.unitPrice ?? transactionItem.harga_satuan)),
+            condition: item.condition || condition || "",
+            notes: item.notes || "",
+          };
+        })
+        .filter((item) => item.quantity > 0);
+
+      if (!claimItems.length) {
+        throw new Error("Minimal satu item wajib diklaim.");
+      }
+
+      const outcomeLabel =
+        normalizedOutcome === "exchange"
+          ? "Tukar Barang"
+          : normalizedOutcome === "refund"
+            ? "Refund"
+            : "Ditolak";
+      const refundMethodValue =
+        normalizedOutcome === "refund"
+          ? String(refundMethod || transaction.metode_bayar || "cash").trim()
+          : normalizedOutcome === "exchange"
+            ? "warranty_exchange"
+            : "warranty_rejected";
+      const replacementSummary = replacementProduct
+        ? `Pengganti: ${replacementProduct.nama} x ${replacementQty}`
+        : "";
+      const finalNotes = [
+        `Hasil klaim: ${outcomeLabel}`,
+        replacementSummary,
+        String(notes || "").trim(),
+      ]
+        .filter(Boolean)
+        .join(" | ");
+      const requestIntent = {
+        transactionId: transaction.id,
+        customerName,
+        reason,
+        condition,
+        notes: finalNotes,
+        claimOutcome: normalizedOutcome,
+        refundMethod: refundMethodValue,
+        replacementProductId: replacementProduct?.id || "",
+        replacementQuantity: replacementQty,
+        items: claimItems,
+      };
+      const requestId = reserveMoneyRequestId("warranty_claim", requestIntent);
+      const todayCount = customerReturns.filter(
+        (row) =>
+          formatDateKey(row.created_at) === formatDateKey(new Date()) &&
+          String(row.no_retur || "").startsWith("GRS")
+      ).length;
+      const claimPayload = {
+        id: requestId,
+        request_id: requestId,
+        no_retur: generateTransactionNumber("GRS", todayCount + 1),
+        transaction_id: transaction.id,
+        transaction_no: transaction.no_transaksi,
+        customer_name: String(customerName || "").trim(),
+        reason: String(reason || "lainnya").trim() || "lainnya",
+        condition: String(condition || "").trim(),
+        notes: finalNotes,
+        refund_method: refundMethodValue,
+        restock: false,
+        warranty_outcome: normalizedOutcome,
+        replacement_product_id: replacementProduct?.id || null,
+        replacement_product_name: replacementProduct?.nama || "",
+        replacement_quantity: replacementQty,
+        created_at: new Date().toISOString(),
+      };
+
+      let savedClaim = null;
+      try {
+        const rpcResult = await callOptionalAtomicRpc("create_warranty_claim_atomic", {
+          p_claim: claimPayload,
+          p_items: claimItems,
+        });
+        if (rpcResult.missing) {
+          throw new Error(WARRANTY_CLAIM_MIGRATION_MESSAGE);
+        }
+        savedClaim = rpcResult.data;
+      } catch (error) {
+        if (String(error?.code || "") === "P0001") {
+          await loadData();
+        }
+        throw error;
+      }
+
+      await loadData();
+      const savedResult = normalizeCustomerReturn(
+        savedClaim || claimPayload,
+        savedClaim?.items || []
+      );
+      completeMoneyRequest("warranty_claim", requestIntent, requestId);
+      return savedResult;
+    },
+    [
+      accessoryTransactions,
+      completeMoneyRequest,
+      customerReturns,
+      loadData,
+      products,
+      requireOwnerProductAccess,
+      reserveMoneyRequestId,
+    ]
+  );
+
   const getDashboardSummary = useCallback(
     ({ startDate, endDate }) => {
       const filteredAccessoryTransactions = accessoryTransactions.filter((transaction) =>
@@ -4719,6 +5051,7 @@ export function DataProvider({
       createSupplierReturn,
       updateSupplierReturnStatus,
       createCustomerReturn,
+      createWarrantyClaim,
       addStock,
       saveStockMutation,
       createAuditLog,
@@ -4738,6 +5071,7 @@ export function DataProvider({
       createEmployee,
       createStockOpnameSession,
       createCustomerReturn,
+      createWarrantyClaim,
       createSupplierReturn,
       currentShift,
       createAccessoryTransaction,
@@ -4927,6 +5261,7 @@ export function DataProvider({
       createSupplierReturn,
       updateSupplierReturnStatus,
       createCustomerReturn,
+      createWarrantyClaim,
     }),
     [
       accessoryTransactions,
@@ -4936,6 +5271,7 @@ export function DataProvider({
       createAccessoryTransaction,
       createCashEntry,
       createCustomerReturn,
+      createWarrantyClaim,
       createDigitalTransaction,
       createLogisticsTransaction,
       createSupplierReturn,

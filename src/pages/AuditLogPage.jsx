@@ -107,7 +107,7 @@ export default function AuditLogPage() {
       <Panel className="space-y-5 p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="brand-kicker">Storage control</p>
+            <p className="brand-kicker">Kapasitas data</p>
             <h2 className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-950">
               Kapasitas audit
             </h2>
@@ -135,7 +135,7 @@ export default function AuditLogPage() {
           <>
             <div className="grid gap-4 md:grid-cols-3">
               <MetricCard
-                label="Total storage"
+                label="Total data"
                 value={formatStorageSize(storageTotals.bytes)}
                 helper="Audit, aktivitas produk, dan sesi"
               />
@@ -146,8 +146,8 @@ export default function AuditLogPage() {
                 accent="info"
               />
               <MetricCard
-                label="Retention policy"
-                value="Protected"
+                label="Retensi audit"
+                value="Dilindungi"
                 helper="Audit kritis tidak dihapus otomatis"
                 accent="danger"
               />

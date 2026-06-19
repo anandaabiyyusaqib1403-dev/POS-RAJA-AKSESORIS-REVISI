@@ -42,7 +42,7 @@ export const ownerNavigationSections = [
         ],
       },
       { to: "/stock-opname", label: "Stock Opname", icon: "clipboard", feature: "stockOpname" },
-      { to: "/retur-supplier", label: "Retur Barang", icon: "return", feature: "returns" },
+      { to: "/retur-supplier", label: "Retur & Garansi", icon: "return", feature: "returns" },
       { to: "/operasional", label: "Catat Operasional", icon: "receipt", feature: "cash" },
     ],
   },

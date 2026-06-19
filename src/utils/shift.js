@@ -5,6 +5,9 @@ export const SHIFT_CLOSE_HOUR = 20;
 export const SHIFT_AUTO_CLOSE_HOUR = 5;
 export const SHIFT_TIME_ZONE = "Asia/Jakarta";
 export const SHIFT_FLAG_THRESHOLD = 50000;
+export const CASHIER_STATIONS = ["Kasir 1", "Kasir 2", "Kasir 3", "Kasir 4"];
+export const SHIFT_TYPES = ["Pagi", "Siang", "Full Day", "Lembur", "Backup"];
+export const DEFAULT_SHIFT_TYPE = "Pagi";
 
 export const SHIFT_STATUS_LABELS = {
   active: "Aktif",
@@ -26,6 +29,16 @@ function normalizePaymentMethod(value, fallback = "cash") {
     .replace(/\s+/g, "_");
 
   return walletAliasMap[normalized] || normalized || fallback;
+}
+
+export function normalizeCashierStation(value, fallback = "") {
+  const normalized = String(value || "").trim();
+  return CASHIER_STATIONS.includes(normalized) ? normalized : fallback;
+}
+
+export function normalizeShiftType(value, fallback = DEFAULT_SHIFT_TYPE) {
+  const normalized = String(value || "").trim();
+  return SHIFT_TYPES.includes(normalized) ? normalized : fallback;
 }
 
 function normalizeDigitalBreakdown(value) {
@@ -110,6 +123,12 @@ export function normalizeShiftRecord(shift) {
   return {
     ...shift,
     cashier_id: shift.cashier_id || shift.cashierId || null,
+    employee_id: shift.employee_id || shift.employeeId || shift.cashier_id || shift.cashierId || null,
+    employee_name: shift.employee_name || shift.employeeName || shift.cashier_name || shift.cashierName || "",
+    cashier_station: normalizeCashierStation(shift.cashier_station || shift.cashierStation),
+    station_code: String(shift.station_code || shift.stationCode || ""),
+    station_name: String(shift.station_name || shift.stationName || shift.cashier_station || shift.cashierStation || ""),
+    shift_type: normalizeShiftType(shift.shift_type || shift.shiftType),
     start_time: shift.start_time || shift.startTime || new Date().toISOString(),
     end_time: shift.end_time || shift.endTime || null,
     opening_cash: normalizeNumber(shift.opening_cash ?? shift.openingCash),

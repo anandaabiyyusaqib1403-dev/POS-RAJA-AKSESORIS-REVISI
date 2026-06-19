@@ -11,8 +11,8 @@ export default function ReturPage({ tab, onTabChange, counts = {}, children }) {
     },
     {
       value: "konsumen",
-      label: "Retur Konsumen",
-      description: "Refund dari transaksi jual",
+      label: "Garansi Konsumen",
+      description: "Klaim dari nota transaksi",
       Icon: UserRound,
     },
   ];
@@ -21,15 +21,15 @@ export default function ReturPage({ tab, onTabChange, counts = {}, children }) {
     <div className="space-y-7">
       <div>
         <PageHeader
-          eyebrow="Retur"
-          title="Retur Barang"
-          description="Catat pengembalian barang dengan alur yang jelas untuk stok dan dampak keuangan."
+          eyebrow="Operasional"
+          title="Retur Supplier & Garansi"
+          description="Catat barang ke pemasok dan klaim garansi konsumen dengan dampak stok yang jelas."
           icon="return"
         />
 
         <div
           role="tablist"
-          aria-label="Jenis retur"
+          aria-label="Jenis retur dan garansi"
           className="grid gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm sm:inline-grid sm:grid-cols-2"
         >
           {tabs.map((item) => (

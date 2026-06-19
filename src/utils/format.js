@@ -11,6 +11,7 @@ function toValidDate(value) {
   return Number.isFinite(date.getTime()) ? date : null;
 }
 
+
 export function formatRupiah(value) {
   return idrFormatter.format(Number(value || 0));
 }

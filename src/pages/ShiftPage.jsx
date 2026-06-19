@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import FeatureLoadPanel from "../components/FeatureLoadPanel";
 import PageHeader from "../components/app/PageHeader";
@@ -10,6 +10,8 @@ import { useWallet } from "../hooks/useWallet";
 import {
   canCloseShift,
   canOpenShift,
+  CASHIER_STATIONS,
+  SHIFT_TYPES,
   getShiftStatusLabel,
 } from "../utils/shift";
 import { formatDateTime, formatRupiah } from "../utils/format";
@@ -54,6 +56,19 @@ function SummaryItem({ label, value, emphasize = false, className = "" }) {
       </p>
     </div>
   );
+}
+
+function getShiftDurationLabel(shift) {
+  const startTime = new Date(shift?.start_time || shift?.created_at || 0).getTime();
+  const endTime = shift?.end_time ? new Date(shift.end_time).getTime() : Date.now();
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) {
+    return "-";
+  }
+  const totalMinutes = Math.max(1, Math.round((endTime - startTime) / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (!hours) return `${minutes} menit`;
+  return minutes ? `${hours}j ${minutes}m` : `${hours}j`;
 }
 
 function WalletBalanceSnapshotCard({ walletBalances = [], className = "" }) {
@@ -173,6 +188,7 @@ export default function ShiftPage() {
     coreError,
     coreLoading,
     shifts,
+    activeShifts = [],
     currentShift,
     selectedCashier,
     selectedCashierId,
@@ -188,6 +204,8 @@ export default function ShiftPage() {
   const [actualCash, setActualCash] = useState("");
   const [notes, setNotes] = useState("");
   const [pin, setPin] = useState("");
+  const [selectedCashierStation, setSelectedCashierStation] = useState("");
+  const [selectedShiftType, setSelectedShiftType] = useState("Pagi");
   const [submitting, setSubmitting] = useState(false);
   const submissionRef = useRef(false);
   const [reviewNotes, setReviewNotes] = useState({});
@@ -204,6 +222,14 @@ export default function ShiftPage() {
     () => shifts.filter((shift) => shift.status === "pending" || shift.status === "flagged"),
     [shifts]
   );
+  const activeStationCount = useMemo(
+    () => new Set(activeShifts.map((shift) => shift.cashier_station).filter(Boolean)).size,
+    [activeShifts]
+  );
+  const overtimeShiftCount = useMemo(
+    () => activeShifts.filter((shift) => shift.shift_type === "Lembur").length,
+    [activeShifts]
+  );
   const drilldownRisk = new URLSearchParams(location.search).get("risk");
   const shiftHistory = useMemo(
     () => shifts.filter((shift) => shift.status !== "active").slice(0, 10),
@@ -213,6 +239,12 @@ export default function ShiftPage() {
     () => shifts.find((shift) => shift.id === correctionTargetId) || null,
     [correctionTargetId, shifts]
   );
+
+  useEffect(() => {
+    if (currentShift) return;
+    const defaultStation = selectedCashier?.cashier_station || selectedCashier?.station_name || "";
+    setSelectedCashierStation((current) => current || defaultStation);
+  }, [currentShift, selectedCashier]);
 
   const showWhatsappStatus = (shift, label) => {
     if (shift?.whatsapp_notification?.held) {
@@ -233,13 +265,17 @@ export default function ShiftPage() {
     submissionRef.current = true;
     setSubmitting(true);
     try {
-      const shift = await startShift({ cashierId: selectedCashierId });
+      const shift = await startShift({
+        cashierId: selectedCashierId,
+        cashierStation: selectedCashierStation,
+        shiftType: selectedShiftType,
+      });
       setActualCash("");
       setNotes("");
       setPin("");
       showNotification(
         "success",
-        `Shift ${shift.cashier_name || selectedCashier?.nama || "kasir"} sudah dimulai.`
+        `Shift ${shift.cashier_name || selectedCashier?.nama || "kasir"} di ${shift.cashier_station || selectedCashierStation} sudah dimulai.`
       );
       showWhatsappStatus(shift, "opening");
     } catch (error) {
@@ -317,6 +353,11 @@ export default function ShiftPage() {
     setApprovalRequest({
       shiftId: shift.id,
       cashierName: shift.cashier_name,
+      cashierStation: shift.cashier_station,
+      shiftType: shift.shift_type,
+      duration: getShiftDurationLabel(shift),
+      cash: shift.total_cash,
+      digital: shift.total_digital,
       decision,
       difference: Number(shift.difference || 0),
     });
@@ -361,7 +402,7 @@ export default function ShiftPage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Shift"
-        title="Opening dan closing shift"
+        title="Buka dan tutup shift"
         description="Buka shift saat mulai kerja, tutup setelah kas dihitung, lalu pemilik toko tinggal cek hasilnya."
         icon="receipt"
       />
@@ -389,10 +430,14 @@ export default function ShiftPage() {
 
           {isOwner ? (
             <div className="mt-5">
-              <label className="mb-2 block text-sm font-semibold text-slate-700">Pilih kasir</label>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">Kasir</label>
               <select
                 value={selectedCashierId}
-                onChange={(event) => setSelectedCashierId(event.target.value)}
+                onChange={(event) => {
+                  setSelectedCashierId(event.target.value);
+                  const nextCashier = cashierUsers.find((cashier) => cashier.id === event.target.value);
+                  setSelectedCashierStation(nextCashier?.cashier_station || nextCashier?.station_name || "");
+                }}
                 className="brand-select h-14 text-base"
               >
                 {cashierUsers.map((cashier) => (
@@ -404,12 +449,50 @@ export default function ShiftPage() {
             </div>
           ) : null}
 
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">Pos Kasir</label>
+              <select
+                value={selectedCashierStation}
+                onChange={(event) => setSelectedCashierStation(event.target.value)}
+                className="brand-select h-14 text-base"
+                disabled={Boolean(currentShift)}
+              >
+                <option value="">Belum ditentukan</option>
+                {CASHIER_STATIONS.map((station) => (
+                  <option key={station} value={station} className="bg-white text-slate-950">
+                    {station}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">Jenis Shift</label>
+              <select
+                value={selectedShiftType}
+                onChange={(event) => setSelectedShiftType(event.target.value)}
+                className="brand-select h-14 text-base"
+                disabled={Boolean(currentShift)}
+              >
+                {SHIFT_TYPES.map((shiftType) => (
+                  <option key={shiftType} value={shiftType} className="bg-white text-slate-950">
+                    {shiftType}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
             <SummaryItem label="Opening cash laci" value="Rp 0" emphasize />
             <SummaryItem
               label="Status sekarang"
               value={currentShift ? getShiftStatusLabel(currentShift.status) : "Belum mulai"}
             />
+            <SummaryItem label="Kasir Aktif" value={String(activeShifts.length)} />
+            <SummaryItem label="Station Aktif" value={String(activeStationCount)} />
+            <SummaryItem label="Pending Closing" value={String(pendingShifts.length)} />
+            <SummaryItem label="Lembur" value={String(overtimeShiftCount)} />
           </div>
 
           <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
@@ -451,11 +534,16 @@ export default function ShiftPage() {
                   Shift kasir hanya bisa dimulai setelah jam 07:00
                 </p>
               ) : null}
+              {!selectedCashierStation ? (
+                <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700">
+                  Pos kasir wajib dipilih sebelum shift dibuka.
+                </p>
+              ) : null}
 
               <button
                 type="button"
                 onClick={handleOpenShift}
-                disabled={submitting || !selectedCashier || !canOpenNow}
+                disabled={submitting || !selectedCashier || !selectedCashierStation || !canOpenNow}
                 className="brand-button-success mt-6 h-16 w-full text-lg disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {submitting ? "Membuka shift..." : "Mulai Shift"}
@@ -483,6 +571,8 @@ export default function ShiftPage() {
 
               <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <SummaryItem label="Kasir" value={currentShift.cashier_name} />
+                <SummaryItem label="Station" value={currentShift.cashier_station || "-"} />
+                <SummaryItem label="Shift" value={currentShift.shift_type || "-"} />
                 <SummaryItem
                   label="Mulai"
                   value={formatDateTime(currentShift.start_time, {
@@ -490,6 +580,7 @@ export default function ShiftPage() {
                     timeStyle: "short",
                   })}
                 />
+                <SummaryItem label="Durasi" value={getShiftDurationLabel(currentShift)} />
                 <SummaryItem label="Transaksi" value={String(currentShift.total_transactions || 0)} />
                 <SummaryItem label="Item" value={String(currentShift.total_items || 0)} />
               </div>
@@ -576,6 +667,49 @@ export default function ShiftPage() {
         </Panel>
       </div>
 
+      <Panel className="p-6">
+        <div className="mb-5 flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+              Kasir Aktif Saat Ini
+            </p>
+            <h2 className="mt-3 font-display text-2xl font-bold tracking-tight text-slate-950">
+              {activeShifts.length ? `${activeShifts.length} Kasir Aktif` : "Belum ada kasir aktif"}
+            </h2>
+          </div>
+          <span className="brand-badge-success">{activeStationCount} station aktif</span>
+        </div>
+        {activeShifts.length ? (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {activeShifts.map((shift) => (
+              <div key={shift.id} className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-black text-slate-950">{shift.cashier_name || "Kasir"}</p>
+                    <p className="mt-1 text-sm font-semibold text-emerald-700">
+                      {shift.cashier_station || "Station belum dipilih"}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-black text-emerald-700">
+                    Aktif
+                  </span>
+                </div>
+                <p className="mt-3 text-sm text-slate-600">
+                  {formatDateTime(shift.start_time, { timeStyle: "short" })} - sekarang
+                </p>
+                <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Shift {shift.shift_type || "-"}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+            Buka shift untuk menampilkan kasir aktif.
+          </div>
+        )}
+      </Panel>
+
       {isOwner ? (
         <Panel className="p-6">
           <div className="mb-5">
@@ -599,6 +733,9 @@ export default function ShiftPage() {
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div>
                       <p className="text-lg font-bold text-slate-950">{shift.cashier_name}</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-700">
+                        {shift.cashier_station || "-"} - Shift {shift.shift_type || "-"} - {getShiftDurationLabel(shift)}
+                      </p>
                       <p className="mt-1 text-sm text-slate-600">
                         {formatDateTime(shift.start_time, {
                           dateStyle: "medium",
@@ -623,8 +760,11 @@ export default function ShiftPage() {
                   </div>
 
                   <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <SummaryItem label="Station" value={shift.cashier_station || "-"} />
+                    <SummaryItem label="Shift" value={shift.shift_type || "-"} />
                     <SummaryItem label="Transaksi" value={String(shift.total_transactions || 0)} />
                     <SummaryItem label="Cash" value={formatRupiah(shift.total_cash || 0)} />
+                    <SummaryItem label="Digital" value={formatRupiah(shift.total_digital || 0)} />
                     <SummaryItem label="Actual" value={formatRupiah(shift.actual_cash || 0)} />
                     <SummaryItem
                       label="Selisih"
@@ -790,6 +930,11 @@ export default function ShiftPage() {
             </h3>
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <SummaryItem label="Kasir" value={approvalRequest.cashierName || "-"} />
+              <SummaryItem label="Station" value={approvalRequest.cashierStation || "-"} />
+              <SummaryItem label="Jenis Shift" value={approvalRequest.shiftType || "-"} />
+              <SummaryItem label="Durasi" value={approvalRequest.duration || "-"} />
+              <SummaryItem label="Cash" value={formatRupiah(approvalRequest.cash || 0)} />
+              <SummaryItem label="Digital" value={formatRupiah(approvalRequest.digital || 0)} />
               <SummaryItem
                 label="Selisih"
                 value={formatRupiah(approvalRequest.difference || 0)}
@@ -849,6 +994,8 @@ export default function ShiftPage() {
             <thead>
               <tr>
                 <th>Kasir</th>
+                <th>Station</th>
+                <th>Shift</th>
                 <th>Mulai</th>
                 <th>Tutup</th>
                 <th>Status</th>
@@ -863,6 +1010,8 @@ export default function ShiftPage() {
                 shiftHistory.map((shift) => (
                   <tr key={shift.id}>
                     <td className="font-semibold text-slate-950">{shift.cashier_name}</td>
+                    <td>{shift.cashier_station || "-"}</td>
+                    <td>{shift.shift_type || "-"}</td>
                     <td>
                       {formatDateTime(shift.start_time, {
                         dateStyle: "medium",

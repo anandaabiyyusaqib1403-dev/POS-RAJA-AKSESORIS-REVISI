@@ -7,7 +7,6 @@ import { useReports } from "../hooks/useReports";
 import { useShift } from "../hooks/useShift";
 import {
   formatDateInput,
-  formatDateTime,
   formatDisplayDate,
   formatRupiah,
 } from "../utils/format";
@@ -44,7 +43,7 @@ function KpiCard({ label, value, trend, accent = "default" }) {
 
   return (
     <Panel className="p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+      <p className="text-xs font-semibold text-slate-500">
         {label}
       </p>
       <p className={`mt-2 text-2xl font-bold leading-tight tracking-tight ${valueClass}`}>
@@ -62,7 +61,7 @@ function RadarItem({ label, value, detail, badge, badgeClass = "brand-badge-neut
   return (
     <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+        <p className="text-xs font-semibold text-slate-500">
           {label}
         </p>
         {badge ? <span className={`${badgeClass} shrink-0`}>{badge}</span> : null}
@@ -102,7 +101,7 @@ export default function Dashboard() {
     getDashboardSummary,
   } = useReports();
   const { products } = useProducts();
-  const { currentShift, activeShifts, shifts = [], selectedCashier } = useShift();
+  const { activeShifts, shifts = [] } = useShift();
   const [period, setPeriod] = useState("today");
   const [customRange, setCustomRange] = useState({
     startDate: formatDateInput(new Date()),
@@ -207,14 +206,14 @@ export default function Dashboard() {
     period === "today"
       ? formatDisplayDate(range.startDate)
       : `${formatDisplayDate(range.startDate)} - ${formatDisplayDate(range.endDate)}`;
-  const shiftValue = currentShift
-    ? `${selectedCashier?.nama || currentShift.cashier_name || "Kasir"} sejak ${formatDateTime(
-        currentShift.start_time,
-        { timeStyle: "short" }
-      )}`
-    : "Belum ada shift aktif";
+  const activeCashierLines = activeShifts.map(
+    (shift) => `${shift.cashier_name || "Kasir"} • ${shift.cashier_station || "Station belum dipilih"}`
+  );
+  const shiftValue = activeShifts.length
+    ? `${activeShifts.length} Kasir Aktif`
+    : "Belum ada kasir aktif";
   const shiftDetail = activeShifts.length
-    ? `${activeShifts.length} shift aktif hari ini`
+    ? activeCashierLines.slice(0, 2).join(" | ")
     : "Buka shift untuk mulai transaksi";
   const stockAlertValue = lowStockProducts.length
     ? `${criticalStockCount} habis, ${Math.max(lowStockProducts.length - criticalStockCount, 0)} menipis`
@@ -274,7 +273,7 @@ export default function Dashboard() {
       ? {
           title: "Retur pending",
           value: `${pendingReturnCount} retur`,
-          detail: "Retur belum selesai dapat mengganggu stok dan profit.",
+          detail: "Retur belum selesai dapat mengganggu stok dan laba.",
           tone: "warning",
           urgency: "RETURN",
           action: "Proses retur",
@@ -287,7 +286,7 @@ export default function Dashboard() {
       to: "/shift",
       icon: "history",
       label: "Shift",
-      detail: pendingShiftCount ? `${pendingShiftCount} perlu review` : currentShift ? "Shift berjalan" : "Buka shift",
+      detail: pendingShiftCount ? `${pendingShiftCount} perlu review` : activeShifts.length ? `${activeShifts.length} kasir aktif` : "Buka shift",
       urgent: pendingShiftCount > 0,
     },
     {
@@ -328,7 +327,7 @@ export default function Dashboard() {
     <div className="space-y-5">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+          <p className="text-xs font-semibold text-slate-500">
             Periode laporan
           </p>
           <p className="mt-1 text-sm font-semibold text-slate-950">
@@ -379,7 +378,7 @@ export default function Dashboard() {
             />
           </div>
           <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+            <p className="text-xs font-semibold text-slate-500">
               Pembanding
             </p>
             <p className="mt-1 text-sm font-semibold text-slate-950">
@@ -446,14 +445,14 @@ export default function Dashboard() {
       <section className="space-y-3" aria-label="Snapshot hari ini">
         <div>
           <p className="text-sm font-bold text-slate-950">Snapshot Hari Ini</p>
-          <p className="text-xs text-slate-500">Level 2 - angka utama untuk scan cepat.</p>
+          <p className="text-xs text-slate-500">Angka utama untuk pengecekan hari ini.</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <KpiCard label="Omzet Hari Ini" value={formatRupiah(todaySummary.omzet)} />
           <KpiCard label="Transaksi" value={formatCount(todaySummary.totalTransaksi)} accent="info" />
           <KpiCard label="Laba Bersih" value={formatRupiah(todaySummary.labaBersih)} accent={todaySummary.labaBersih >= 0 ? "success" : "danger"} />
           <KpiCard label="Saldo Kas" value={formatRupiah(cashWalletBalance)} />
-          <KpiCard label="Shift Aktif" value={String(activeShifts.length)} accent="success" />
+          <KpiCard label="Kasir Aktif" value={String(activeShifts.length)} accent="success" />
         </div>
       </section>
 
@@ -497,11 +496,11 @@ export default function Dashboard() {
 
         <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-[repeat(4,minmax(0,1fr))]">
           <RadarItem
-            label="Status shift"
+            label="Kasir Aktif"
             value={shiftValue}
             detail={shiftDetail}
-            badge={currentShift ? "Aktif" : "Belum aktif"}
-            badgeClass={currentShift ? "brand-badge-success" : "brand-badge-neutral"}
+            badge={activeShifts.length ? "Aktif" : "Belum aktif"}
+            badgeClass={activeShifts.length ? "brand-badge-success" : "brand-badge-neutral"}
           />
           <RadarItem
             label="Alert stok"
@@ -526,12 +525,12 @@ export default function Dashboard() {
       <Panel className="p-4">
         <div className="mb-4 flex flex-col gap-1 border-b border-slate-200 pb-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="brand-kicker text-[var(--brand-gold)]/90">Smart Insight</p>
+            <p className="brand-kicker">Catatan hari ini</p>
             <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-950">
-              Sinyal operasional yang perlu dibaca hari ini
+              Hal yang perlu dicek
             </h3>
           </div>
-          <span className="brand-badge-info">Aturan operasional</span>
+          <span className="brand-badge-neutral">Dari data toko</span>
         </div>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {operationalInsights.map((insight) => (
@@ -539,7 +538,7 @@ export default function Dashboard() {
               key={insight.title}
               className={`brand-control-alert brand-control-alert-${insight.tone}`}
             >
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+              <p className="text-xs font-bold text-slate-500">
                 {insight.title}
               </p>
               <p className="mt-2 text-sm leading-6 text-slate-600">{insight.detail}</p>
@@ -552,7 +551,7 @@ export default function Dashboard() {
         <Panel className="p-4">
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="brand-kicker text-[var(--brand-gold)]/90">Tren Penjualan</p>
+              <p className="brand-kicker">Penjualan</p>
               <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-950">
                 Pergerakan omzet
               </h3>
@@ -569,7 +568,7 @@ export default function Dashboard() {
 
         <Panel className="p-4">
           <div className="mb-4">
-            <p className="brand-kicker text-[var(--brand-gold)]/90">Top Kategori</p>
+            <p className="brand-kicker">Kategori</p>
             <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-950">
               Kategori dan produk terlaris
             </h3>
@@ -643,9 +642,9 @@ export default function Dashboard() {
       <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
         <Panel className="p-4">
           <div className="mb-4">
-            <p className="brand-kicker text-[var(--brand-gold)]/90">Breakdown Channel</p>
+            <p className="brand-kicker">Kanal penjualan</p>
             <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-950">
-              Kontribusi per channel
+              Kontribusi per kanal
             </h3>
           </div>
 
@@ -656,7 +655,7 @@ export default function Dashboard() {
                   <div>
                     <p className="font-semibold text-slate-950">{item.label}</p>
                     <p className="mt-1 text-sm text-slate-500">
-                      {item.transaksi} transaksi - profit {formatRupiah(item.keuntungan)}
+                      {item.transaksi} transaksi - laba {formatRupiah(item.keuntungan)}
                     </p>
                   </div>
                   <span className="brand-badge-neutral">{item.kontribusi}%</span>
@@ -677,7 +676,7 @@ export default function Dashboard() {
 
         <Panel variant="strong" className="p-4">
           <div className="mb-4">
-            <p className="brand-kicker text-[var(--brand-gold)]/90">Snapshot Kas</p>
+            <p className="brand-kicker">Kas harian</p>
             <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-950">
               Arus kas harian
             </h3>
@@ -705,7 +704,7 @@ export default function Dashboard() {
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs uppercase tracking-[0.22em] text-slate-400">
+                    <p className="text-xs font-semibold text-slate-400">
                       Sisa saldo
                     </p>
                     <p className="mt-2 text-sm font-semibold text-slate-950">

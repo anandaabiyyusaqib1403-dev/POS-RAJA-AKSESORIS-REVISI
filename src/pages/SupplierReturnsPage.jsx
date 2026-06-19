@@ -41,8 +41,11 @@ import {
   getDatePresetRange,
   getReasonLabel,
   getStatusLabel,
+  getWarrantyOutcome,
+  getWarrantyOutcomeLabel,
   reasonOptions,
   statusOptions,
+  warrantyOutcomeOptions,
 } from "../features/returns/services/returnReports";
 
 const emptyForm = {
@@ -67,10 +70,12 @@ const emptyCustomerForm = {
   transactionItemId: "",
   customerName: "",
   quantity: "",
+  claimOutcome: "exchange",
+  replacementProductId: "",
+  replacementQuantity: "",
   reason: "rusak",
   condition: "",
   refundMethod: "cash",
-  restock: true,
   notes: "",
 };
 
@@ -120,6 +125,8 @@ function ReturnReceiptPreview({ row, type }) {
   const isCustomer = type === "customer";
   const items = Array.isArray(row.items) ? row.items : [];
   const totalValue = isCustomer ? row.total_refund_amount : row.total_estimated_value;
+  const warrantyOutcome = isCustomer ? getWarrantyOutcome(row) : "";
+  const warrantyOutcomeLabel = isCustomer ? getWarrantyOutcomeLabel(row) : "";
 
   return (
     <div className="mx-auto w-full max-w-[340px] rounded-lg border border-slate-200 bg-white p-4 font-mono text-[13px] leading-6 text-slate-950 shadow-sm">
@@ -128,13 +135,13 @@ function ReturnReceiptPreview({ row, type }) {
         <p className="mt-1 text-xs text-slate-600">Jl. Bango Raya No.3</p>
         <p className="text-xs text-slate-600">Jakarta Selatan</p>
         <p className="mt-3 border-y border-dashed border-slate-400 py-2 text-xs font-bold tracking-[0.12em]">
-          {isCustomer ? "BUKTI RETUR KONSUMEN" : "BUKTI RETUR SUPPLIER"}
+          {isCustomer ? "BUKTI GARANSI KONSUMEN" : "BUKTI RETUR SUPPLIER"}
         </p>
       </div>
 
       <div className="mt-3 space-y-1 border-b border-dashed border-slate-400 pb-3">
         <div className="flex justify-between gap-3">
-          <span>No Retur</span>
+          <span>{isCustomer ? "No Klaim" : "No Retur"}</span>
           <span className="text-right font-bold">{row.no_retur}</span>
         </div>
         <div className="flex justify-between gap-3">
@@ -156,8 +163,8 @@ function ReturnReceiptPreview({ row, type }) {
           </div>
         ) : null}
         <div className="flex justify-between gap-3">
-          <span>Status</span>
-          <span className="text-right">{getStatusLabel(row.status)}</span>
+          <span>{isCustomer ? "Hasil Klaim" : "Status"}</span>
+          <span className="text-right">{isCustomer ? warrantyOutcomeLabel : getStatusLabel(row.status)}</span>
         </div>
         <div className="flex justify-between gap-3">
           <span>Alasan</span>
@@ -189,7 +196,7 @@ function ReturnReceiptPreview({ row, type }) {
             );
           })
         ) : (
-          <p className="text-slate-500">Belum ada item retur.</p>
+          <p className="text-slate-500">Belum ada item {isCustomer ? "garansi" : "retur"}.</p>
         )}
       </div>
 
@@ -200,12 +207,12 @@ function ReturnReceiptPreview({ row, type }) {
         </div>
         <div className="flex justify-between gap-3 text-base font-black">
           <span>{isCustomer ? "TOTAL REFUND" : "ESTIMASI NILAI"}</span>
-          <span>{formatRupiah(totalValue)}</span>
+          <span>{isCustomer && warrantyOutcome !== "refund" ? "-" : formatRupiah(totalValue)}</span>
         </div>
         {isCustomer ? (
           <div className="flex justify-between gap-3">
-            <span>Restock</span>
-            <span>{row.restock ? "Ya" : "Tidak"}</span>
+            <span>Dampak Stok</span>
+            <span>{warrantyOutcome === "exchange" ? "Stok pengganti keluar" : "Tidak berubah"}</span>
           </div>
         ) : null}
       </div>
@@ -231,7 +238,7 @@ export default function SupplierReturnsPage() {
     createSupplierReturn,
     refreshReturns,
     updateSupplierReturnStatus,
-    createCustomerReturn,
+    createWarrantyClaim,
   } = useTransactions();
   const { products } = useProducts();
   const {
@@ -300,6 +307,11 @@ export default function SupplierReturnsPage() {
     () =>
       selectedTransaction?.items?.find((item) => item.id === customerForm.transactionItemId) || null,
     [customerForm.transactionItemId, selectedTransaction]
+  );
+
+  const selectedReplacementProduct = useMemo(
+    () => activeProducts.find((product) => product.id === customerForm.replacementProductId) || null,
+    [activeProducts, customerForm.replacementProductId]
   );
 
   const customerEstimatedRefund =
@@ -411,14 +423,20 @@ export default function SupplierReturnsPage() {
     try {
       await executeSensitiveAction(
         async () => {
-          await createCustomerReturn({
+          const claimOutcome = customerForm.claimOutcome || "exchange";
+
+          await createWarrantyClaim({
             transactionId: customerForm.transactionId,
             customerName: customerForm.customerName,
             reason: customerForm.reason,
             condition: customerForm.condition,
             notes: customerForm.notes,
-            refundMethod: customerForm.refundMethod,
-            restock: customerForm.restock,
+            claimOutcome,
+            refundMethod: claimOutcome === "refund" ? customerForm.refundMethod : "",
+            replacementProductId:
+              claimOutcome === "exchange" ? customerForm.replacementProductId : "",
+            replacementQuantity:
+              claimOutcome === "exchange" ? customerForm.replacementQuantity : "",
             items: [
               {
                 transactionItemId: customerForm.transactionItemId,
@@ -431,13 +449,13 @@ export default function SupplierReturnsPage() {
         },
         "CUSTOMER_RETURN.CREATE"
       );
-      showNotification("success", "Retur konsumen sudah dibuat.");
+      showNotification("success", "Klaim garansi konsumen sudah disimpan.");
       setCustomerForm(emptyCustomerForm);
     } catch (error) {
       if (isPinActionCancelledError(error)) return;
       showNotification(
         "error",
-        getMoneySaveFailureMessage(error, "Gagal membuat retur konsumen.")
+        getMoneySaveFailureMessage(error, "Gagal membuat klaim garansi.")
       );
     } finally {
       submissionRef.current = false;
@@ -491,7 +509,10 @@ export default function SupplierReturnsPage() {
       return;
     }
 
-    showNotification("success", "Jendela cetak bukti retur sudah dibuka.");
+    showNotification(
+      "success",
+      `Jendela cetak bukti ${type === "customer" ? "garansi" : "retur"} sudah dibuka.`
+    );
   };
 
   const openReturnPreview = (row, type) => {
@@ -546,9 +567,9 @@ export default function SupplierReturnsPage() {
     await exportReturnWorkbook({
       supplierRows: filteredReturns,
       customerRows: filteredCustomerReturns,
-      fileName: `Laporan_Retur_Raja_Aksesoris_${periodLabel}_${fileDate}.xlsx`,
+      fileName: `Laporan_Retur_Garansi_Raja_Aksesoris_${periodLabel}_${fileDate}.xlsx`,
     });
-    showNotification("success", "Laporan retur Excel berhasil dibuat.");
+    showNotification("success", "Laporan retur dan garansi Excel berhasil dibuat.");
   };
 
   return (
@@ -625,16 +646,19 @@ export default function SupplierReturnsPage() {
           <FeatureLoadPanel
             error={coreError || customerReturnPage.error}
             loading={coreLoading || customerReturnPage.loading}
-            loadingText="Sinkronisasi retur konsumen..."
+            loadingText="Sinkronisasi klaim garansi..."
             onRetry={customerReturnPage.error ? customerReturnPage.refresh : refreshReturns}
           />
           <ReturKonsumenForm
             form={customerForm}
             setForm={setCustomerForm}
             transactions={accessoryTransactions}
+            products={activeProducts}
             selectedTransaction={selectedTransaction}
             selectedTransactionItem={selectedTransactionItem}
+            selectedReplacementProduct={selectedReplacementProduct}
             reasonOptions={reasonOptions}
+            outcomeOptions={warrantyOutcomeOptions}
             estimatedRefund={customerEstimatedRefund}
             formatRupiah={formatRupiah}
             submitting={submitting}
@@ -795,13 +819,19 @@ export default function SupplierReturnsPage() {
             <div className="flex flex-col gap-3 border-b border-slate-200 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--brand-gold)]">
-                  Preview bukti retur
+                  Preview bukti {previewTarget.type === "customer" ? "garansi" : "retur"}
                 </p>
                 <h2 className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-950">
                   {previewTarget.row.no_retur}
                 </h2>
               </div>
-              <StatusBadge status={previewTarget.row.status} />
+              {previewTarget.type === "customer" ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-bold text-sky-800">
+                  {getWarrantyOutcomeLabel(previewTarget.row)}
+                </span>
+              ) : (
+                <StatusBadge status={previewTarget.row.status} />
+              )}
             </div>
 
             <div className="brand-scrollbar overflow-y-auto bg-slate-50 px-5 py-6">

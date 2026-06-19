@@ -38,16 +38,16 @@ export default function PinConfirmationModal({ isOpen, onClose, onConfirm, title
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="brand-panel w-full max-w-md rounded-lg p-6">
-        <h3 className="mb-2 text-lg font-semibold text-slate-900">
+    <div className="brand-modal-backdrop fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
+      <div className="brand-modal-surface w-full max-w-md p-6">
+        <h3 className="font-display text-xl font-bold tracking-tight text-slate-950">
           {title || "Konfirmasi PIN"}
         </h3>
-        {message ? <p className="mb-4 text-sm text-slate-600">{message}</p> : null}
+        {message ? <p className="mt-2 text-sm leading-6 text-slate-600">{message}</p> : null}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="mt-5 space-y-4">
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
+            <label className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-slate-500">
               Masukkan PIN
             </label>
             <input
@@ -63,13 +63,13 @@ export default function PinConfirmationModal({ isOpen, onClose, onConfirm, title
               }}
               disabled={loading}
               placeholder="******"
-              className="w-full rounded-lg border border-slate-300 px-4 py-2 font-mono text-center text-lg placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="brand-input brand-input-lg font-mono text-center text-lg tracking-[0.24em] placeholder-slate-400"
               autoFocus
             />
           </div>
 
           {error ? (
-            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</div>
           ) : null}
 
           <div className="flex gap-3 pt-4">

@@ -46,7 +46,7 @@ function SummaryTable({ rows, labelHeader = "Nama", emptyText }) {
             <th className="text-right">Transaksi</th>
             <th className="text-right">Omzet</th>
             <th className="text-right">Modal</th>
-            <th className="text-right">Profit</th>
+            <th className="text-right">Laba</th>
             <th className="text-right">Margin</th>
           </tr>
         </thead>
@@ -85,12 +85,12 @@ function ProviderBreakdown({ rows }) {
       <table className="brand-table">
         <thead>
           <tr>
-            <th>Category</th>
+            <th>Kategori</th>
             <th>Provider</th>
             <th className="text-right">Total Transaksi</th>
             <th className="text-right">Total Omzet</th>
             <th className="text-right">Total Modal</th>
-            <th className="text-right">Total Profit</th>
+            <th className="text-right">Total laba</th>
           </tr>
         </thead>
         <tbody>
@@ -166,11 +166,11 @@ function TopProducts({ rows }) {
       <table className="brand-table">
         <thead>
           <tr>
-            <th>Rank</th>
-            <th>Product Name</th>
-            <th className="text-right">Qty Sold</th>
-            <th className="text-right">Revenue</th>
-            <th className="text-right">Profit</th>
+            <th>Urutan</th>
+            <th>Produk</th>
+            <th className="text-right">Qty terjual</th>
+            <th className="text-right">Omzet</th>
+            <th className="text-right">Laba</th>
           </tr>
         </thead>
         <tbody>
@@ -215,7 +215,7 @@ function CashierPerformance({ rows }) {
             <th>Kasir</th>
             <th className="text-right">Total Transaksi</th>
             <th className="text-right">Total Omzet</th>
-            <th className="text-right">Total Profit</th>
+            <th className="text-right">Total laba</th>
           </tr>
         </thead>
         <tbody>
@@ -259,7 +259,7 @@ function DetailTable({ rows }) {
             <th className="text-right">Qty</th>
             <th className="text-right">Harga Jual</th>
             <th className="text-right">Modal</th>
-            <th className="text-right">Profit</th>
+            <th className="text-right">Laba</th>
             <th>Metode Bayar Customer</th>
             <th>Nomor Tujuan</th>
           </tr>
@@ -430,7 +430,7 @@ export default function SalesReportPage() {
       <PageHeader
         eyebrow="Laporan"
         title="Laporan Penjualan"
-        description="Kontrol utama penjualan Raja Aksesoris dari produk, layanan digital, transfer, e-wallet, dan jasa dalam satu laporan transaksi."
+        description="Rekap penjualan produk, layanan digital, transfer, e-wallet, dan jasa."
         icon="trend"
         actions={
           <>
@@ -496,7 +496,7 @@ export default function SalesReportPage() {
           helper="Pengeluaran dari modal transaksi."
         />
         <MetricCard
-          label="Total Profit"
+          label="Total laba"
           value={formatRupiah(report.globalSummary.total_profit)}
           helper={`Margin ${formatPercent(report.globalSummary.margin)}`}
           accent="success"
@@ -506,9 +506,9 @@ export default function SalesReportPage() {
       <Panel variant="strong" className="p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="brand-kicker text-[var(--brand-gold)]/90">Catatan Pemilik</p>
+            <p className="brand-kicker">Catatan pemilik</p>
             <h3 className="mt-1 text-xl font-bold tracking-tight text-slate-950">
-              Alert laporan yang bisa langsung ditindak
+              Angka yang perlu dicek
             </h3>
           </div>
           <span className={lowMarginRows.length || lossProviders.length ? "brand-badge-danger" : "brand-badge-success"}>
@@ -518,7 +518,7 @@ export default function SalesReportPage() {
 
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <div className="brand-control-alert brand-control-alert-info">
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+            <p className="text-xs font-bold text-slate-500">
               Kasir terkuat
             </p>
             <p className="mt-2 text-lg font-black text-slate-950">
@@ -551,7 +551,7 @@ export default function SalesReportPage() {
             <p className="mt-1 text-sm text-slate-600">
               {lossProviders.length
                 ? "Cek harga jual dan modal provider ini."
-                : "Semua provider profit positif."}
+                : "Semua provider laba positif."}
             </p>
           </div>
         </div>
@@ -583,7 +583,7 @@ export default function SalesReportPage() {
                 {bestCategory?.label || "-"}
               </p>
               <p className="mt-2 text-sm text-slate-600">
-                {bestCategory ? formatRupiah(bestCategory.total_profit) : formatRupiah(0)} profit
+                {bestCategory ? formatRupiah(bestCategory.total_profit) : formatRupiah(0)} laba
               </p>
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -671,7 +671,7 @@ export default function SalesReportPage() {
           Performa kasir
         </h3>
         <p className="mt-2 text-sm text-slate-600">
-          Total transaksi, omzet, dan profit per kasir.
+          Total transaksi, omzet, dan laba per kasir.
         </p>
         <div className="mt-5">
           <CashierPerformance rows={report.cashierSummary} />

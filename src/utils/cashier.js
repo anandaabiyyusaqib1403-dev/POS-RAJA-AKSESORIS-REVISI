@@ -1,10 +1,9 @@
-export const DEFAULT_CASHIER_NAME = "Sriyati";
+export const DEFAULT_CASHIER_NAME = "Kasir tidak tercatat";
 export const DEFAULT_OWNER_NAME = "Amri Syowfial";
 
 const knownCashierAliases = new Set([
   "kasir",
   "kasir raja aksesoris",
-  "sriyati",
 ]);
 
 const knownOwnerAliases = new Set([

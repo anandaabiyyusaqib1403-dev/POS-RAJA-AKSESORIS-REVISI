@@ -5,6 +5,9 @@ export interface StaffUser {
   username?: string;
   phone?: string;
   role: string;
+  cashier_station?: string;
+  station_code?: string;
+  station_name?: string;
   status?: string;
   pin_hash?: string | null;
   base_salary?: number;

@@ -207,7 +207,7 @@ export default function StockOpnamePage() {
     return (
       <div className="space-y-6 pb-24">
         <PageHeader
-          eyebrow="Inventory audit"
+          eyebrow="Cek stok"
           title="Stock Opname"
           description="Cocokkan stok fisik dengan catatan barang sebelum penyesuaian."
           icon="clipboard"
@@ -231,7 +231,7 @@ export default function StockOpnamePage() {
   return (
     <div className="space-y-6 pb-24">
       <PageHeader
-        eyebrow="Inventory audit"
+        eyebrow="Cek stok"
         title="Stock Opname"
         description="Cocokkan stok fisik dengan catatan barang sebelum stok disesuaikan."
         icon="clipboard"

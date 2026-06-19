@@ -941,7 +941,7 @@ export default function CashierPage() {
           </span>
           <p className="mt-3 text-sm font-semibold text-slate-950">
             {currentShift
-              ? `${selectedCashier?.nama || currentShift.cashier_name || "Kasir"} aktif sejak ${formatDateTime(
+              ? `${selectedCashier?.nama || currentShift.cashier_name || "Kasir"} • ${currentShift.cashier_station || "Station belum dipilih"} • Shift ${currentShift.shift_type || "-"} aktif sejak ${formatDateTime(
                   currentShift.start_time,
                   {
                     dateStyle: "medium",

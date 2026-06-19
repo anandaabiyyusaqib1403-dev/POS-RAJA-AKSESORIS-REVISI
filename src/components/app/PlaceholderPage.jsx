@@ -15,8 +15,8 @@ export default function PlaceholderPage({
 
       <Panel className="grid gap-5 p-6 lg:grid-cols-[1.1fr_0.9fr]">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[var(--brand-gold)]">
-            MVP Placeholder
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--brand-gold-strong)]">
+            Retail Operations Platform
           </p>
           <p className="mt-4 text-base leading-8 text-slate-600">
             Halaman ini sudah disiapkan sebagai bagian dari struktur aplikasi premium Raja

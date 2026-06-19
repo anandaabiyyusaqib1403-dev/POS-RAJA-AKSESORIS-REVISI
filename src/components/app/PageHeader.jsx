@@ -8,15 +8,15 @@ export default function PageHeader({
   icon = "spark",
 }) {
   return (
-    <div className="mb-6 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+    <div className="mb-6 flex flex-col gap-5 border-b border-[var(--brand-border)] pb-5 lg:flex-row lg:items-end lg:justify-between">
       <div className="max-w-3xl">
         {eyebrow ? (
           <div className="brand-chip mb-3">
-            <AppIcon name={icon} className="h-3.5 w-3.5" />
+            <AppIcon name={icon} className="h-3.5 w-3.5 text-[var(--brand-gold-strong)]" />
             {eyebrow}
           </div>
         ) : null}
-        <h1 className="font-display text-3xl font-bold tracking-tight text-slate-950 sm:text-[40px]">
+        <h1 className="font-display text-3xl font-black tracking-tight text-slate-950 sm:text-[40px]">
           {title}
         </h1>
         {description ? (
@@ -26,9 +26,7 @@ export default function PageHeader({
         ) : null}
       </div>
 
-      {actions ? (
-        <div className="flex flex-wrap gap-3.5 sm:gap-4 lg:justify-end">{actions}</div>
-      ) : null}
+      {actions ? <div className="flex flex-wrap gap-3.5 sm:gap-4 lg:justify-end">{actions}</div> : null}
     </div>
   );
 }

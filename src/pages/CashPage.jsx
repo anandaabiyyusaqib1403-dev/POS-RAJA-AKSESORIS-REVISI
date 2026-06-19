@@ -265,7 +265,7 @@ export default function CashPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Operations Cashflow"
+        eyebrow="Kas operasional"
         title="Catat operasional"
         description="Masuk dan keluar kas harian dicatat dari satu tempat supaya kontrol saldo toko tetap rapi."
         icon="receipt"
@@ -283,11 +283,10 @@ export default function CashPage() {
           <div>
             <p className="brand-kicker">Kontrol tanggal operasional</p>
             <h2 className="mt-1 font-display text-xl font-bold tracking-tight text-slate-950">
-              Cashflow harian dan riwayat dari satu toolbar
+              Tanggal laporan dan riwayat kas
             </h2>
             <p className="mt-1 text-sm text-slate-600">
-              Ringkasan membaca tanggal laporan, sedangkan timeline bisa difilter cepat saat cek
-              kas.
+              Ringkasan memakai tanggal laporan, riwayat bisa difilter saat cek kas.
             </p>
           </div>
 
@@ -375,7 +374,7 @@ export default function CashPage() {
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+              <p className="text-xs font-bold text-slate-500">
                 Masuk hari ini
               </p>
               <p className="mt-2 text-lg font-black text-emerald-700">
@@ -383,7 +382,7 @@ export default function CashPage() {
               </p>
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+              <p className="text-xs font-bold text-slate-500">
                 Keluar hari ini
               </p>
               <p className="mt-2 text-lg font-black text-rose-700">
@@ -396,7 +395,7 @@ export default function CashPage() {
         <MetricCard
           label="Saldo awal"
           value={formatRupiah(dailySummary.saldo_awal)}
-          helper={`Opening ${formatTimelineDate(summaryDate)}`}
+          helper={`Awal ${formatTimelineDate(summaryDate)}`}
           trend={{ label: "Awal", tone: "neutral" }}
         />
         <MetricCard
@@ -418,13 +417,12 @@ export default function CashPage() {
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <Panel className="p-6">
           <div className="mb-6">
-            <p className="brand-kicker">Cash entry</p>
+            <p className="brand-kicker">Input kas</p>
             <h3 className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-950">
               {isEditing ? "Edit entri operasional" : "Tambah entri operasional"}
             </h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Alur input dibuat bertahap supaya kasir cepat memilih jenis, nominal, lalu catatan
-              lapangan.
+              Pilih jenis transaksi, isi nominal, lalu tambahkan catatan singkat.
             </p>
           </div>
 
@@ -495,8 +493,7 @@ export default function CashPage() {
               <div className="mb-4">
                 <p className="text-sm font-black text-slate-950">2. Nominal & tanggal</p>
                 <p className="mt-1 text-sm text-slate-500">
-                  Input nominal terasa seperti uang sungguhan, dengan shortcut untuk transaksi
-                  rutin.
+                  Masukkan nominal kas dan tanggal catat.
                 </p>
               </div>
 
@@ -574,7 +571,7 @@ export default function CashPage() {
                 )}
               </button>
               <button type="button" onClick={resetForm} className="brand-button-secondary">
-                Reset form
+                  Kosongkan
               </button>
             </div>
           </form>
@@ -591,12 +588,12 @@ export default function CashPage() {
         <Panel variant="strong" className="p-6">
           <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
-              <p className="brand-kicker">Activity timeline</p>
+              <p className="brand-kicker">Riwayat kas</p>
               <h3 className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-950">
                 Riwayat operasional
               </h3>
               <p className="mt-2 text-sm text-slate-600">
-                {historyRows.length} entri tampil dalam format aktivitas kas.
+                {historyRows.length} entri tampil pada filter ini.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">

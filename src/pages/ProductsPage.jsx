@@ -992,11 +992,11 @@ export default function ProductsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Inventory"
+        eyebrow="Stok"
         title="Stok barang"
         description={
           canManageProducts
-            ? "Fitur ini berfungsi untuk tambah produk, pilih kategori, dan isi stok jauh lebih cepat tanpa banyak langkah."
+            ? "Tambah produk, pilih kategori, dan perbarui stok dari halaman ini."
             : "Kasir bisa melihat stok dan menambah stok masuk tanpa membuka akses edit atau hapus produk."
         }
         icon="box"
@@ -1136,7 +1136,7 @@ export default function ProductsPage() {
           label="Total produk"
           value={String(stats.totalProduk)}
           helper={`${stats.produkAktif} produk aktif siap dijual`}
-          trend={{ label: "Katalog", tone: "neutral" }}
+          trend={{ label: "Produk", tone: "neutral" }}
           icon="box"
         />
         <MetricCard
@@ -1152,7 +1152,7 @@ export default function ProductsPage() {
           value={String(stats.stokHabis)}
           helper="Tidak tersedia untuk transaksi"
           accent="danger"
-          trend={{ label: stats.stokHabis ? "Urgent" : "Aman", tone: stats.stokHabis ? "down" : "neutral" }}
+          trend={{ label: stats.stokHabis ? "Segera cek" : "Aman", tone: stats.stokHabis ? "down" : "neutral" }}
           icon="badge-alert"
         />
         <MetricCard
@@ -1160,7 +1160,7 @@ export default function ProductsPage() {
           value={formatRupiah(stats.nilaiStok)}
           helper={`${stockHealthPercent}% item berada di zona aman`}
           accent="info"
-          trend={{ label: "Stock health", tone: stockRiskCount ? "neutral" : "up" }}
+          trend={{ label: "Kondisi stok", tone: stockRiskCount ? "neutral" : "up" }}
           icon="gauge"
         />
       </div>

@@ -41,6 +41,13 @@ export function normalizeSupplierReturn(row: Record<string, any>, items: Record<
   };
 }
 
+function normalizeWarrantyOutcome(row: Record<string, any>) {
+  const value = String(row.warranty_outcome || row.refund_method || "").trim().toLowerCase();
+  if (value === "exchange" || value === "warranty_exchange") return "exchange";
+  if (value === "rejected" || value === "ditolak" || value === "warranty_rejected") return "rejected";
+  return "refund";
+}
+
 export function normalizeCustomerReturn(row: Record<string, any>, items: Record<string, any>[] = []) {
   const normalizedItems = items
     .filter((item) => item.customer_return_id === row.id)
@@ -74,6 +81,7 @@ export function normalizeCustomerReturn(row: Record<string, any>, items: Record<
     total_refund_amount: Math.max(0, toSafeInteger(row.total_refund_amount || 0)),
     refund_method: row.refund_method || "",
     restock: row.restock !== false,
+    warranty_outcome: normalizeWarrantyOutcome(row),
     created_by: row.created_by || null,
     created_at: row.created_at || new Date().toISOString(),
     updated_at: row.updated_at || row.created_at || new Date().toISOString(),

@@ -1718,14 +1718,14 @@ export default function DigitalPage() {
     <Panel className="p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <p className="brand-kicker">Quick Repeat</p>
+          <p className="brand-kicker">Ulang transaksi</p>
           <p className="mt-1 text-sm font-bold text-slate-950">
             {lastRepeatDraft ? lastRepeatDraft.productName : "Belum ada transaksi terakhir"}
           </p>
           <p className="mt-1 truncate text-xs font-semibold text-slate-500">
             {lastRepeatDraft
               ? `${lastRepeatDraft.targetNumber || "Tanpa nomor"} - ${formatRupiah(lastRepeatDraft.sellingPrice || lastRepeatDraft.nominal)}`
-              : "Transaksi berhasil berikutnya akan siap diulang dengan konfirmasi."}
+              : "Transaksi terakhir akan muncul di sini setelah berhasil disimpan."}
           </p>
         </div>
         <button
@@ -1734,7 +1734,7 @@ export default function DigitalPage() {
           onClick={() => setRepeatConfirmationOpen(true)}
           className="brand-button-primary shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Repeat terakhir
+          Ulangi terakhir
         </button>
       </div>
     </Panel>
@@ -1745,12 +1745,12 @@ export default function DigitalPage() {
       <Panel variant="strong" className="p-5">
         <div className="max-w-3xl">
           <div className="min-w-0">
-            <p className="brand-kicker text-[var(--brand-gold-strong)]">Layanan Digital</p>
+            <p className="brand-kicker">Layanan digital</p>
             <h2 className="mt-2 font-display text-2xl font-black tracking-tight text-slate-950">
-              Kategori - Provider - Produk - Nomor - Bayar
+              Pilih kategori, produk, nomor, lalu bayar
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              Mulai dari kategori, pilih provider, lalu tampilkan nominal yang relevan saja.
+              Gunakan urutan ini untuk mengurangi salah pilih nominal atau provider.
             </p>
           </div>
         </div>
@@ -1780,7 +1780,7 @@ export default function DigitalPage() {
               {activeCategoryMeta?.label || getCategoryLabel(activeCategory)}
             </p>
             <p className="mt-1 text-sm text-slate-500">
-              Pilih provider untuk membuka produk/nominal. Search bisa melewati langkah ini.
+              Pilih provider untuk membuka produk atau nominal. Pencarian bisa langsung dipakai.
             </p>
           </div>
           <span className="brand-badge-neutral self-start lg:self-auto">
@@ -2001,7 +2001,7 @@ export default function DigitalPage() {
                           lineProfit < 0 ? "text-rose-700" : "text-emerald-700"
                         }`}
                       >
-                        Profit {formatRupiah(lineProfit)}
+                        Laba {formatRupiah(lineProfit)}
                       </span>
                     </div>
                   </div>
@@ -2054,7 +2054,7 @@ export default function DigitalPage() {
             <span className="font-semibold text-slate-950">{resolvedPaymentLabel}</span>
           </div>
           <div className="mt-2 flex items-center justify-between gap-4 text-sm text-slate-600">
-            <span>Profit</span>
+            <span>Laba</span>
             <span className={`font-semibold ${cartProfit < 0 ? "text-rose-700" : "text-emerald-700"}`}>
               {formatRupiah(cartProfit)}
             </span>
@@ -2429,7 +2429,7 @@ export default function DigitalPage() {
                     />
                   </div>
                   <div className="mt-4 flex items-center justify-between gap-4 text-sm text-slate-600">
-                    <span>Profit</span>
+                    <span>Laba</span>
                     <span
                       className={`font-semibold ${
                         directProfit < 0 ? "text-rose-700" : "text-emerald-700"

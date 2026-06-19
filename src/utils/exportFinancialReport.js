@@ -390,7 +390,7 @@ function buildSummarySheet(
     ["Jumlah Transaksi", computedSummary.jumlahTransaksi],
     ["Rata-rata Transaksi", { formula: "IF(B13=0,0,E6/B13)", result: computedSummary.rataRataTransaksi }],
     ["Retur Supplier", computedSummary.totalReturSupplier],
-    ["Retur Konsumen", computedSummary.totalReturKonsumen],
+    ["Garansi Konsumen", computedSummary.totalReturKonsumen],
   ];
   insightRows.forEach(([label, value], index) => {
     const rowNumber = index + 13;

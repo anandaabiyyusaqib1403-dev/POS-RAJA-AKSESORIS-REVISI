@@ -26,6 +26,18 @@ function normalizeUsername(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function isMissingStationColumnError(error = {}) {
+  const text = [error.message, error.details, error.hint]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return (
+    ["42703", "PGRST204"].includes(String(error.code || "")) ||
+    text.includes("cashier_station") ||
+    text.includes("station_name")
+  );
+}
+
 function validatePayload(body) {
   const nama = String(body?.nama || body?.name || "").trim();
   const email = normalizeEmail(body?.email);
@@ -37,6 +49,8 @@ function validatePayload(body) {
   const baseSalary = Number(body?.baseSalary ?? body?.base_salary ?? 0);
   const defaultBonus = Number(body?.defaultBonus ?? body?.default_bonus ?? 0);
   const defaultDeduction = Number(body?.defaultDeduction ?? body?.default_deduction ?? 0);
+  const cashierStation = String(body?.cashierStation ?? body?.cashier_station ?? "").trim();
+  const validStations = new Set(["", "Kasir 1", "Kasir 2", "Kasir 3", "Kasir 4"]);
 
   if (!nama) throw new Error("Nama karyawan wajib diisi.");
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Email karyawan tidak valid.");
@@ -49,6 +63,9 @@ function validatePayload(body) {
   if ([baseSalary, defaultBonus, defaultDeduction].some((value) => !Number.isFinite(value) || value < 0)) {
     throw new Error("Nominal payroll tidak boleh minus.");
   }
+  if (!validStations.has(cashierStation)) {
+    throw new Error("Pos kasir tidak valid.");
+  }
 
   return {
     nama,
@@ -57,6 +74,7 @@ function validatePayload(body) {
     password,
     pin,
     role,
+    cashierStation,
     phone,
     baseSalary: Math.trunc(baseSalary),
     defaultBonus: Math.trunc(defaultBonus),
@@ -157,6 +175,8 @@ export async function employeesHandler(req, res) {
       username: payload.username,
       phone: payload.phone || null,
       role: payload.role,
+      cashier_station: payload.cashierStation || null,
+      station_name: payload.cashierStation || null,
       status: "active",
       pin_hash: null,
       base_salary: payload.baseSalary,
@@ -164,11 +184,24 @@ export async function employeesHandler(req, res) {
       default_deduction: payload.defaultDeduction,
     };
 
-    const { data: profile, error: profileError } = await adminClient
+    let { data: profile, error: profileError } = await adminClient
       .from("users")
       .upsert(profilePayload, { onConflict: "id" })
-      .select("id,nama,email,username,phone,role,status,base_salary,default_bonus,default_deduction")
+      .select("id,nama,email,username,phone,role,cashier_station,station_name,status,base_salary,default_bonus,default_deduction")
       .single();
+
+    if (profileError && isMissingStationColumnError(profileError)) {
+      const fallbackPayload = { ...profilePayload };
+      delete fallbackPayload.cashier_station;
+      delete fallbackPayload.station_name;
+      const fallback = await adminClient
+        .from("users")
+        .upsert(fallbackPayload, { onConflict: "id" })
+        .select("id,nama,email,username,phone,role,status,base_salary,default_bonus,default_deduction")
+        .single();
+      profile = fallback.data;
+      profileError = fallback.error;
+    }
 
     if (profileError) {
       await adminClient.auth.admin.deleteUser(createdUser.id).catch(() => {});

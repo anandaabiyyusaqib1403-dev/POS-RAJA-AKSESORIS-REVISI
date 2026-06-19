@@ -68,6 +68,10 @@ select
   to_regprocedure('public.create_customer_return_atomic(jsonb,jsonb)') is not null
 union all
 select
+  'create_warranty_claim_atomic',
+  to_regprocedure('public.create_warranty_claim_atomic(jsonb,jsonb)') is not null
+union all
+select
   'update_supplier_return_status_atomic',
   to_regprocedure('public.update_supplier_return_status_atomic(uuid,text,jsonb)') is not null
 union all
@@ -112,6 +116,7 @@ from (
     ('create_logistics_transaction_atomic', 'public.create_logistics_transaction_atomic(jsonb)'),
     ('create_supplier_return_atomic', 'public.create_supplier_return_atomic(jsonb,jsonb)'),
     ('create_customer_return_atomic', 'public.create_customer_return_atomic(jsonb,jsonb)'),
+    ('create_warranty_claim_atomic', 'public.create_warranty_claim_atomic(jsonb,jsonb)'),
     ('update_supplier_return_status_atomic', 'public.update_supplier_return_status_atomic(uuid,text,jsonb)'),
     ('verify_user_pin', 'public.verify_user_pin(text)'),
     ('owner_get_audit_storage_summary', 'public.owner_get_audit_storage_summary()'),

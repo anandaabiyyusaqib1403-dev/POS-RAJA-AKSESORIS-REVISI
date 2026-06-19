@@ -113,7 +113,7 @@ function createFinancialTransaction({
   sortAt,
   noTransaksi,
   tanggal,
-  kasir = "Sriyati",
+  kasir = "Kasir tidak tercatat",
   jenis,
   keterangan,
   nominalMasuk = 0,
@@ -224,7 +224,7 @@ function buildFinancialTransactions({ summary }) {
         .slice(0, 6)
         .toUpperCase()}`,
       tanggal: formatReportDateTime(entry.created_at || entry.tanggal),
-      kasir: formatCashierName(entry.kasir_id || "Sriyati"),
+      kasir: formatCashierName(entry.kasir_id),
       jenis: isIncome ? "Pemasukan" : isRestock ? "Modal Barang" : "Operasional",
       keterangan: [categoryLabel, entry.keterangan].filter(Boolean).join(" - "),
       nominalMasuk: isIncome ? entry.nominal : 0,
@@ -238,7 +238,7 @@ function buildFinancialTransactions({ summary }) {
       sortAt: row.created_at,
       noTransaksi: row.no_retur,
       tanggal: formatReportDateTime(row.created_at),
-      kasir: formatCashierName(row.created_by || "Sriyati"),
+      kasir: formatCashierName(row.created_by),
       jenis: "Retur Supplier",
       keterangan: [
         row.supplier_name,
@@ -257,13 +257,17 @@ function buildFinancialTransactions({ summary }) {
       sortAt: row.created_at,
       noTransaksi: row.no_retur,
       tanggal: formatReportDateTime(row.created_at),
-      kasir: formatCashierName(row.created_by || "Sriyati"),
-      jenis: "Retur Konsumen",
+      kasir: formatCashierName(row.created_by),
+      jenis: "Garansi Konsumen",
       keterangan: [
         row.transaction_no,
         row.customer_name,
         `${row.total_quantity || 0} pcs`,
-        row.restock ? "Restock" : "Tidak restock",
+        row.refund_method === "warranty_exchange"
+          ? "Tukar barang"
+          : row.refund_method === "warranty_rejected"
+            ? "Ditolak"
+            : "Refund",
       ]
         .filter(Boolean)
         .join(" - "),
@@ -331,7 +335,7 @@ function buildReportSummary(transactions, saldoAwal, dashboardSummary) {
     .filter((row) => row.jenis === "Retur Supplier")
     .reduce((sum, row) => sum + row.nominalKeluar, 0);
   const totalReturKonsumen = transactions
-    .filter((row) => row.jenis === "Retur Konsumen")
+    .filter((row) => row.jenis === "Garansi Konsumen")
     .reduce((sum, row) => sum + row.nominalKeluar, 0);
   const jumlahTransaksi = transactions.filter((row) => row.jenis === "Penjualan").length;
 
@@ -437,9 +441,9 @@ export default function FinanceReportPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Finance"
+        eyebrow="Keuangan"
         title="Laporan keuangan"
-        description="Ringkasan omzet, modal, profit, dan pengeluaran toko dalam satu tampilan yang siap dipakai pemilik toko."
+        description="Omzet, modal, laba, dan pengeluaran toko untuk pengecekan pemilik."
         icon="chart"
         actions={
           <>
@@ -500,8 +504,8 @@ export default function FinanceReportPage() {
           label="Total modal"
           value={formatRupiah(reportMetrics.modal)}
         />
-        <MetricCard label="Profit kotor" value={formatRupiah(reportMetrics.keuntunganKotor)} accent="success" />
-        <MetricCard label="Profit bersih" value={formatRupiah(reportMetrics.labaBersih)} accent="gold" />
+        <MetricCard label="Laba kotor" value={formatRupiah(reportMetrics.keuntunganKotor)} accent="success" />
+        <MetricCard label="Laba bersih" value={formatRupiah(reportMetrics.labaBersih)} accent="gold" />
       </div>
 
       <Panel className="px-5 py-4">
@@ -534,11 +538,11 @@ export default function FinanceReportPage() {
           accent="gold"
         />
         <MetricCard
-          label="Refund konsumen"
+          label="Refund garansi"
           value={formatRupiah(summary.returnSummary?.customer?.refundAmount || 0)}
         />
         <MetricCard
-          label="Qty retur konsumen"
+          label="Qty garansi konsumen"
           value={`${summary.returnSummary?.customer?.quantity || 0} pcs`}
           accent="success"
         />
@@ -547,7 +551,7 @@ export default function FinanceReportPage() {
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <Panel className="p-6">
           <h3 className="font-display text-2xl font-bold tracking-tight text-slate-950">
-            Breakdown channel
+            Rincian kanal
           </h3>
           <div className="mt-5 space-y-3">
             {summary.breakdown.map((item) => (
@@ -563,7 +567,7 @@ export default function FinanceReportPage() {
                   <div className="text-right">
                     <p className="text-sm font-bold text-slate-950">{formatRupiah(item.omzet)}</p>
                     <p className="mt-1 text-xs text-[var(--brand-gold-strong)]">
-                      Profit {formatRupiah(item.keuntungan)}
+                      Laba {formatRupiah(item.keuntungan)}
                     </p>
                   </div>
                 </div>
@@ -618,7 +622,7 @@ export default function FinanceReportPage() {
       </div>
 
       <Panel variant="strong" className="p-6">
-        <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[var(--brand-gold-strong)]">
+        <p className="text-sm font-semibold text-[var(--brand-gold-strong)]">
           Ringkasan periode
         </p>
         <p className="mt-3 text-sm leading-7 text-slate-700">
@@ -626,7 +630,7 @@ export default function FinanceReportPage() {
           Laporan ini cocok untuk rekap harian pemilik toko sebelum setor tunai atau tutup buku.
         </p>
         <p className="mt-3 text-xs text-slate-500">
-          Digenerate {formatDateTime(new Date(), { dateStyle: "medium", timeStyle: "short" })}
+          Dibuat {formatDateTime(new Date(), { dateStyle: "medium", timeStyle: "short" })}
         </p>
       </Panel>
     </div>

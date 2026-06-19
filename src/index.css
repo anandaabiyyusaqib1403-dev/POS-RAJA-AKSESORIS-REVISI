@@ -27,9 +27,11 @@
   --brand-text: #0f172a;
   --brand-text-muted: #64748b;
   --brand-text-soft: #94a3b8;
-  --brand-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
-  --brand-shadow-soft: 0 6px 18px rgba(15, 23, 42, 0.06);
-  --brand-ring: 0 0 0 3px rgba(212, 175, 55, 0.18);
+  --brand-shadow: 0 18px 42px rgba(15, 23, 42, 0.09);
+  --brand-shadow-soft: 0 8px 22px rgba(15, 23, 42, 0.055);
+  --brand-shadow-lift: 0 22px 58px rgba(15, 23, 42, 0.12);
+  --brand-shadow-gold: 0 14px 30px rgba(180, 126, 20, 0.22);
+  --brand-ring: 0 0 0 4px rgba(212, 175, 55, 0.16);
   --brand-radius: 8px;
   --brand-radius-sm: 6px;
   --button-radius-sm: 6px;
@@ -42,7 +44,7 @@
   --modal-width-md: 560px;
   --table-cell-py: 0.75rem;
   --table-cell-px: 1rem;
-  --table-header-bg: rgba(248, 250, 252, 0.94);
+  --table-header-bg: rgba(248, 250, 252, 0.96);
   --surface: #ffffff;
   --surface-secondary: #f8fafc;
   --surface-tertiary: #eef2f7;
@@ -61,8 +63,8 @@
   --warning-soft: rgba(180, 83, 9, 0.12);
   --info: #2563eb;
   --info-soft: rgba(37, 99, 235, 0.1);
-  --shadow-soft: 0 6px 18px rgba(15, 23, 42, 0.06);
-  --shadow-card: 0 18px 38px rgba(15, 23, 42, 0.08);
+  --shadow-soft: var(--brand-shadow-soft);
+  --shadow-card: var(--brand-shadow);
   --focus-ring: 0 0 0 3px rgba(212, 175, 55, 0.22);
   --radius-control: 8px;
 }
@@ -123,7 +125,9 @@
 @layer components {
   .brand-shell {
     @apply min-h-screen;
-    background: var(--brand-bg);
+    background:
+      radial-gradient(circle at 18% 0%, rgba(212, 175, 55, 0.08), transparent 28%),
+      linear-gradient(180deg, #f8fafc 0%, var(--brand-bg) 46%, #eef3f8 100%);
   }
 
   .brand-sidebar {
@@ -135,19 +139,25 @@
   .brand-panel {
     @apply rounded-lg border;
     border-radius: var(--brand-radius);
-    background: var(--brand-surface);
-    border-color: var(--brand-border);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.94)),
+      var(--brand-surface);
+    border-color: rgba(203, 213, 225, 0.82);
     box-shadow: var(--brand-shadow-soft);
   }
 
   .brand-panel-muted {
-    background: var(--brand-surface-soft);
-    border-color: var(--brand-border);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(248, 250, 252, 0.95)),
+      var(--brand-surface-soft);
+    border-color: rgba(226, 232, 240, 0.92);
   }
 
   .brand-panel-strong {
-    background: var(--brand-surface);
-    border-color: var(--brand-border-strong);
+    background:
+      radial-gradient(circle at 0% 0%, rgba(212, 175, 55, 0.09), transparent 34%),
+      var(--brand-surface);
+    border-color: rgba(203, 213, 225, 0.9);
     box-shadow: var(--brand-shadow);
   }
 
@@ -213,8 +223,8 @@
 
   .brand-command-strip {
     @apply rounded-lg border p-4;
-    border-color: var(--border-strong);
-    background: var(--surface);
+    border-color: rgba(203, 213, 225, 0.92);
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
     box-shadow: var(--shadow-soft);
   }
 
@@ -261,6 +271,10 @@
     border-top: 4px solid #dc2626;
   }
 
+  .brand-modal-surface.brand-modal-destructive::before {
+    background: linear-gradient(90deg, #b91c1c, #ef4444 48%, #991b1b);
+  }
+
   .brand-modal-consequence {
     @apply rounded-lg border px-4 py-3 text-sm leading-6;
     border-color: rgba(220, 38, 38, 0.24);
@@ -268,8 +282,351 @@
     color: var(--text);
   }
 
+  .brand-modal-backdrop {
+    background:
+      radial-gradient(circle at 50% 20%, rgba(212, 175, 55, 0.12), transparent 34%),
+      rgba(15, 23, 42, 0.48);
+    backdrop-filter: blur(8px);
+  }
+
+  .brand-modal-surface {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(203, 213, 225, 0.72);
+    border-radius: var(--brand-radius);
+    background: #ffffff;
+    box-shadow: var(--brand-shadow-lift);
+  }
+
+  .brand-modal-surface::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    background: linear-gradient(90deg, #93620a, #e5c24a 48%, #b37b12);
+  }
+
+  .brand-modal-header {
+    border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+    background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+  }
+
+  .brand-modal-footer {
+    border-top: 1px solid rgba(226, 232, 240, 0.9);
+    background: rgba(248, 250, 252, 0.88);
+  }
+
   .brand-glow {
     box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.16), 0 10px 30px rgba(212, 175, 55, 0.08);
+  }
+
+  .login-os-shell {
+    position: relative;
+    isolation: isolate;
+    background:
+      radial-gradient(circle at 22% 16%, rgba(212, 175, 55, 0.20), transparent 26%),
+      radial-gradient(circle at 78% 82%, rgba(122, 79, 7, 0.11), transparent 30%),
+      radial-gradient(circle at 50% 112%, rgba(15, 23, 42, 0.13), transparent 34%),
+      linear-gradient(135deg, #fbfaf6 0%, #f4f7fb 45%, #edf2f7 100%);
+  }
+
+  .login-os-shell::before,
+  .login-os-shell::after {
+    content: "";
+    position: fixed;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: 999px;
+    filter: blur(18px);
+  }
+
+  .login-os-shell::before {
+    width: 520px;
+    height: 520px;
+    left: max(-180px, calc(50% - 720px));
+    top: 5%;
+    background: rgba(212, 175, 55, 0.12);
+  }
+
+  .login-os-shell::after {
+    width: 560px;
+    height: 560px;
+    right: max(-220px, calc(50% - 760px));
+    bottom: -170px;
+    background: rgba(15, 23, 42, 0.08);
+  }
+
+  .login-os-main {
+    display: flex;
+    min-height: 100vh;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(24px, 5vw, 60px) 16px;
+  }
+
+  .login-os-console {
+    position: relative;
+    display: grid;
+    width: min(100%, 920px);
+    max-width: calc(100vw - 32px);
+    grid-template-columns: minmax(0, 0.94fr) minmax(380px, 1.06fr);
+    overflow: hidden;
+    border: 1px solid rgba(203, 213, 225, 0.84);
+    border-radius: var(--brand-radius);
+    background: #ffffff;
+    box-shadow:
+      0 34px 90px rgba(15, 23, 42, 0.15),
+      0 1px 0 rgba(255, 255, 255, 0.92) inset;
+  }
+
+  .login-os-console::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    z-index: 1;
+    height: 3px;
+    background: linear-gradient(90deg, #93620a 0%, #e5c24a 48%, #b37b12 100%);
+  }
+
+  .login-os-brand-panel {
+    position: relative;
+    display: flex;
+    min-height: 524px;
+    flex-direction: column;
+    padding: 44px 42px 34px;
+    background:
+      radial-gradient(circle at 18% 14%, rgba(212, 175, 55, 0.20), transparent 30%),
+      linear-gradient(145deg, #fffdf8 0%, #f8fafc 62%, #eef3f8 100%);
+    border-right: 1px solid rgba(226, 232, 240, 0.86);
+  }
+
+  .login-os-brand-panel::after {
+    content: "";
+    position: absolute;
+    inset: auto 36px 120px;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(148, 163, 184, 0), rgba(148, 163, 184, 0.45), rgba(148, 163, 184, 0));
+  }
+
+  .login-brand-mark {
+    width: 124px;
+    height: 124px;
+    border: 1px solid rgba(203, 213, 225, 0.82);
+    border-radius: var(--brand-radius);
+    box-shadow:
+      0 24px 54px rgba(15, 23, 42, 0.12),
+      0 0 0 8px rgba(255, 255, 255, 0.58),
+      0 0 52px rgba(212, 175, 55, 0.16);
+  }
+
+  .login-operation-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+    margin-top: auto;
+    padding-top: 36px;
+  }
+
+  .login-operation-item {
+    min-width: 0;
+    border: 1px solid rgba(203, 213, 225, 0.76);
+    border-radius: var(--brand-radius-sm);
+    background: rgba(255, 255, 255, 0.68);
+    padding: 12px 13px;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.045);
+  }
+
+  .login-operation-item span {
+    display: block;
+    color: var(--brand-gold-strong);
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .login-operation-item strong {
+    display: block;
+    margin-top: 5px;
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 850;
+    line-height: 1.25;
+  }
+
+  .login-os-footnote {
+    margin-top: 16px;
+    color: #94a3b8;
+    font-size: 11px;
+    font-weight: 850;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  .login-os-form-panel {
+    display: flex;
+    align-items: center;
+    background:
+      radial-gradient(circle at 100% 0%, rgba(212, 175, 55, 0.08), transparent 26%),
+      #ffffff;
+    padding: 44px 46px;
+  }
+
+  .login-os-form {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .login-security-mark {
+    display: inline-flex;
+    flex-shrink: 0;
+    border: 1px solid rgba(212, 175, 55, 0.28);
+    border-radius: var(--brand-radius);
+    background: linear-gradient(180deg, rgba(212, 175, 55, 0.14), rgba(255, 255, 255, 0.72));
+    padding: 13px;
+    color: var(--brand-gold-strong);
+    box-shadow:
+      0 10px 24px rgba(15, 23, 42, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.84);
+  }
+
+  .login-input-wrap {
+    display: flex;
+    height: 56px;
+    align-items: center;
+    gap: 11px;
+    border: 1px solid rgba(203, 213, 225, 0.94);
+    border-radius: var(--brand-radius);
+    background: linear-gradient(180deg, #fbfcfe 0%, #f7fafc 100%);
+    padding: 0 15px;
+    box-shadow:
+      inset 0 1px 2px rgba(15, 23, 42, 0.035),
+      0 1px 0 rgba(255, 255, 255, 0.9);
+    transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease, transform 180ms ease;
+  }
+
+  .login-input-wrap:hover {
+    border-color: rgba(148, 163, 184, 0.96);
+    background: #ffffff;
+    box-shadow:
+      inset 0 1px 2px rgba(15, 23, 42, 0.025),
+      0 8px 22px rgba(15, 23, 42, 0.045);
+  }
+
+  .login-input-wrap:focus-within {
+    transform: translateY(-1px);
+    border-color: rgba(180, 126, 20, 0.86);
+    background: #ffffff;
+    box-shadow:
+      0 0 0 4px rgba(212, 175, 55, 0.14),
+      0 14px 28px rgba(15, 23, 42, 0.08);
+  }
+
+  .login-input {
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    color: var(--brand-text);
+    font-size: 15px;
+    font-weight: 750;
+    line-height: 1;
+    outline: none;
+  }
+
+  .login-input::placeholder {
+    color: #94a3b8;
+    font-weight: 700;
+  }
+
+  .login-primary-button {
+    display: inline-flex;
+    min-height: 56px;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    border-radius: var(--brand-radius);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0) 42%),
+      linear-gradient(180deg, #e8c747 0%, #d2a72a 100%);
+    color: #161104;
+    font-size: 14px;
+    font-weight: 950;
+    line-height: 1.25;
+    box-shadow:
+      0 16px 32px rgba(180, 126, 20, 0.28),
+      0 1px 0 rgba(255, 255, 255, 0.45) inset,
+      0 -1px 0 rgba(122, 79, 7, 0.16) inset;
+    transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+  }
+
+  .login-primary-button:hover {
+    transform: translateY(-1px);
+    filter: saturate(1.05);
+    box-shadow:
+      0 20px 38px rgba(180, 126, 20, 0.34),
+      0 1px 0 rgba(255, 255, 255, 0.5) inset,
+      0 -1px 0 rgba(122, 79, 7, 0.18) inset;
+  }
+
+  .login-primary-button:active {
+    transform: translateY(1px);
+    box-shadow:
+      0 10px 20px rgba(180, 126, 20, 0.22),
+      0 1px 0 rgba(255, 255, 255, 0.34) inset;
+  }
+
+  @media (max-width: 767px) {
+    .login-os-main {
+      align-items: flex-start;
+      padding: 18px 14px 22px;
+    }
+
+    .login-os-console {
+      max-width: calc(100vw - 28px);
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .login-os-brand-panel {
+      min-height: auto;
+      padding: 26px 22px 22px;
+      text-align: center;
+      border-right: 0;
+      border-bottom: 1px solid rgba(226, 232, 240, 0.86);
+    }
+
+    .login-os-brand-panel::after,
+    .login-operation-grid,
+    .login-os-footnote {
+      display: none;
+    }
+
+    .login-brand-mark {
+      width: 102px;
+      height: 102px;
+      margin-inline: auto;
+    }
+
+    .login-brand-mark img {
+      width: 78px;
+      height: 78px;
+    }
+
+    .login-os-brand-panel h1 {
+      margin-top: 20px;
+      font-size: 31px;
+    }
+
+    .login-brand-subtitle {
+      max-width: 320px;
+      margin-inline: auto;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .login-os-form-panel {
+      padding: 24px 20px 22px;
+    }
   }
 
   .brand-input,
@@ -277,9 +634,11 @@
   .brand-textarea {
     @apply w-full rounded-lg border px-4 text-sm font-medium text-[var(--brand-text)] outline-none transition duration-200;
     border-radius: var(--brand-radius);
-    background: var(--brand-surface);
-    border-color: var(--brand-border);
-    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.02);
+    background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+    border-color: rgba(203, 213, 225, 0.9);
+    box-shadow:
+      inset 0 1px 2px rgba(15, 23, 42, 0.025),
+      0 1px 0 rgba(255, 255, 255, 0.86);
   }
 
   .brand-input,
@@ -305,14 +664,31 @@
 
   .brand-input::placeholder,
   .brand-textarea::placeholder {
-    color: #94A3B8;
+    color: #94a3b8;
   }
 
   .brand-input:focus,
   .brand-select:focus,
   .brand-textarea:focus {
-    border-color: var(--brand-gold);
-    box-shadow: var(--brand-ring);
+    border-color: rgba(180, 126, 20, 0.82);
+    background: #ffffff;
+    box-shadow:
+      var(--brand-ring),
+      0 8px 20px rgba(15, 23, 42, 0.055);
+  }
+
+  .brand-input:hover,
+  .brand-select:hover,
+  .brand-textarea:hover {
+    border-color: rgba(148, 163, 184, 0.96);
+  }
+
+  .brand-login-input:-webkit-autofill,
+  .brand-login-input:-webkit-autofill:hover,
+  .brand-login-input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--brand-text);
+    box-shadow: 0 0 0 1000px #ffffff inset;
+    transition: background-color 9999s ease-out;
   }
 
   .input {
@@ -328,23 +704,30 @@
   .brand-button-primary {
     @apply inline-flex min-h-[48px] max-w-full items-center justify-center gap-2 rounded-lg px-5 py-3 text-center text-sm font-semibold leading-5 transition;
     border-radius: var(--button-radius-md);
-    background: var(--brand-gold);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0) 42%),
+      linear-gradient(180deg, #e2bd3d 0%, #d1a528 100%);
     color: var(--brand-text);
-    box-shadow: 0 8px 18px rgba(212, 175, 55, 0.18);
+    box-shadow:
+      var(--brand-shadow-gold),
+      0 1px 0 rgba(255, 255, 255, 0.42) inset;
   }
 
   .brand-button-primary:hover {
     transform: translateY(-1px);
-    background: #c9a227;
-    box-shadow: 0 10px 24px rgba(212, 175, 55, 0.22);
+    filter: saturate(1.04);
+    box-shadow:
+      0 18px 36px rgba(180, 126, 20, 0.28),
+      0 1px 0 rgba(255, 255, 255, 0.48) inset;
   }
 
   .brand-button-secondary {
     @apply inline-flex min-h-[48px] max-w-full items-center justify-center gap-2 rounded-lg border px-5 py-3 text-center text-sm font-semibold leading-5 transition;
     border-radius: var(--button-radius-md);
-    border-color: var(--brand-border);
-    background: var(--brand-surface);
+    border-color: rgba(203, 213, 225, 0.88);
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
     color: #475569;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.035);
   }
 
   .brand-button-secondary:hover {
@@ -358,7 +741,7 @@
     @apply inline-flex min-h-[48px] max-w-full items-center justify-center gap-2 rounded-lg px-5 py-3 text-center text-sm font-semibold leading-5 text-white transition;
     border-radius: var(--button-radius-md);
     background: #16a34a;
-    box-shadow: 0 8px 18px rgba(22, 163, 74, 0.16);
+    box-shadow: 0 12px 24px rgba(22, 163, 74, 0.18);
   }
 
   .brand-button-success:hover {
@@ -372,7 +755,7 @@
     border-radius: var(--button-radius-md);
     background: var(--brand-warning);
     color: #ffffff;
-    box-shadow: 0 8px 18px rgba(180, 83, 9, 0.16);
+    box-shadow: 0 12px 24px rgba(180, 83, 9, 0.18);
   }
 
   .brand-button-warning:hover {
@@ -385,7 +768,7 @@
     @apply inline-flex min-h-[48px] max-w-full items-center justify-center gap-2 rounded-lg px-5 py-3 text-center text-sm font-semibold leading-5 text-white transition disabled:cursor-not-allowed disabled:opacity-60;
     border-radius: var(--button-radius-md);
     background: var(--brand-danger);
-    box-shadow: 0 8px 18px rgba(220, 38, 38, 0.16);
+    box-shadow: 0 12px 24px rgba(220, 38, 38, 0.18);
   }
 
   .brand-button-danger:hover {
@@ -395,15 +778,17 @@
   }
 
   .brand-chip {
-    @apply inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.24em];
+    @apply inline-flex items-center gap-2 rounded-md px-2.5 py-1 text-xs font-semibold;
     border-radius: var(--brand-radius-sm);
-    background: rgba(212, 175, 55, 0.1);
-    color: var(--brand-gold-strong);
+    border: 1px solid rgba(203, 213, 225, 0.72);
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    color: #475569;
   }
 
   .brand-badge {
     @apply inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-semibold;
     border-radius: var(--brand-radius-sm);
+    border: 1px solid rgba(212, 175, 55, 0.18);
     background: rgba(212, 175, 55, 0.12);
     color: var(--brand-gold-strong);
   }
@@ -443,7 +828,7 @@
   }
 
   .brand-kicker {
-    @apply text-[11px] font-semibold uppercase tracking-[0.26em];
+    @apply text-xs font-semibold leading-5;
     color: var(--brand-text-muted);
   }
 
@@ -476,8 +861,11 @@
     position: relative;
     overflow: hidden;
     border-radius: var(--brand-radius);
-    border-color: var(--brand-border);
-    background: var(--brand-surface-soft);
+    border-color: rgba(203, 213, 225, 0.78);
+    background:
+      radial-gradient(circle at 50% 0%, rgba(212, 175, 55, 0.10), transparent 34%),
+      linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
   }
 
   .brand-empty-state::before {
@@ -490,7 +878,9 @@
     background:
       linear-gradient(135deg, rgba(212, 175, 55, 0.22), rgba(37, 99, 235, 0.08)),
       var(--brand-surface);
-    box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.24);
+    box-shadow:
+      inset 0 0 0 1px rgba(212, 175, 55, 0.24),
+      0 10px 24px rgba(15, 23, 42, 0.06);
   }
 
   .brand-empty-state-with-motion::before {
@@ -504,8 +894,8 @@
   .brand-subtle-block {
     @apply rounded-lg border px-4 py-4;
     border-radius: var(--brand-radius);
-    border-color: var(--brand-border);
-    background: var(--brand-surface-soft);
+    border-color: rgba(203, 213, 225, 0.78);
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   }
 
   .brand-metric-strip {
@@ -515,8 +905,9 @@
 
   .brand-stat-tile {
     @apply flex min-h-[94px] flex-col justify-between rounded-lg border bg-white px-4 py-4;
-    border-color: var(--brand-border);
-    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.035);
+    border-color: rgba(203, 213, 225, 0.78);
+    background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.045);
   }
 
   .brand-stat-tile-label {
@@ -608,10 +999,10 @@
   }
 
   .brand-product-card-available {
-    background: var(--brand-surface);
-    border-color: var(--brand-border);
+    background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+    border-color: rgba(203, 213, 225, 0.84);
     color: #334155;
-    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.045);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
   }
 
   .brand-product-card-available:hover {
@@ -787,8 +1178,8 @@
   }
 
   .brand-table thead {
-    @apply text-xs uppercase tracking-[0.22em];
-    color: #64748B;
+    @apply text-[11px] uppercase tracking-[0.16em];
+    color: #64748b;
   }
 
   .brand-table thead th {
@@ -797,25 +1188,29 @@
     z-index: 3;
     background: var(--table-header-bg);
     backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(203, 213, 225, 0.9);
+    font-weight: 850;
   }
 
   .brand-table tbody tr {
-    border-top: 1px solid var(--brand-border);
+    transition: background-color 160ms ease, box-shadow 160ms ease;
   }
 
   .brand-table tbody tr:hover {
-    background: rgba(212, 175, 55, 0.04);
+    background: rgba(212, 175, 55, 0.055);
   }
 
   .brand-table th,
   .brand-table td {
     padding: var(--table-cell-py) var(--table-cell-px);
     vertical-align: middle;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.82);
   }
 
   .brand-table-toolbar {
     @apply grid gap-3 rounded-lg border bg-white p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center;
-    border-color: var(--brand-border);
+    border-color: rgba(203, 213, 225, 0.82);
+    background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
     box-shadow: var(--brand-shadow-soft);
   }
 
@@ -842,7 +1237,7 @@
     position: sticky;
     right: 0;
     z-index: 4;
-    box-shadow: -10px 0 18px rgba(248, 250, 252, 0.72);
+    box-shadow: -12px 0 20px rgba(248, 250, 252, 0.78);
   }
 
   .brand-table thead .brand-table-action-cell {

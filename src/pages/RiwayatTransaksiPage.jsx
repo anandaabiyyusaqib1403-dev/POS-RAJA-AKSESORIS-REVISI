@@ -47,7 +47,7 @@ const PERIOD_OPTIONS = [
 ];
 
 const SOURCE_OPTIONS = [
-  { value: "semua", label: "Semua channel" },
+  { value: "semua", label: "Semua kanal" },
   { value: "aksesoris", label: "Kasir Aksesoris" },
   { value: "digital", label: "Layanan Digital" },
   { value: "logistik", label: "Logistik" },
@@ -164,7 +164,7 @@ function DetailMetric({ label, value, accent = "default" }) {
 
   return (
     <div className={`rounded-lg border px-4 py-4 ${accentClass}`}>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+      <p className="text-xs font-semibold text-slate-500">
         {label}
       </p>
       <p className="mt-3 text-xl font-black tracking-tight text-slate-950">{value}</p>
@@ -175,7 +175,7 @@ function DetailMetric({ label, value, accent = "default" }) {
 function DetailItem({ label, value }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+      <p className="text-xs font-semibold text-slate-500">
         {label}
       </p>
       <p className="mt-2 text-sm font-semibold text-slate-950">{value}</p>
@@ -741,7 +741,7 @@ export default function RiwayatTransaksiPage() {
       <PageHeader
         eyebrow="Semua Aktivitas"
         title="Riwayat transaksi"
-        description="Semua penjualan, layanan, logistik, mutasi saldo, dan kas operasional saya satukan di sini supaya pengecekan harian jauh lebih cepat."
+        description="Penjualan, layanan, logistik, mutasi saldo, dan kas operasional dalam satu daftar pengecekan."
         icon="history"
         actions={
           <>
@@ -957,7 +957,7 @@ export default function RiwayatTransaksiPage() {
               <thead>
                 <tr>
                   <th>Waktu</th>
-                  <th>Channel</th>
+                  <th>Kanal</th>
                   <th>Ringkasan</th>
                   <th className="text-right">Nominal</th>
                   <th className="text-right">Dampak laba</th>
@@ -1191,7 +1191,7 @@ export default function RiwayatTransaksiPage() {
                 <thead>
                   <tr>
                     <th>Tanggal void</th>
-                    <th>Channel</th>
+                    <th>Kanal</th>
                     <th>Transaksi</th>
                     <th className="text-right">Nominal</th>
                     <th>Diproses oleh</th>

@@ -1,35 +1,63 @@
--- Ganti email di bawah supaya sama dengan akun yang benar-benar dibuat di Supabase Authentication.
--- Contoh file ini memakai akun owner `amri@raja.pos` dan kasir `sriyati@raja.pos`.
+-- Setup role dasar.
+--
+-- Status pra-rekrutmen:
+-- - Owner tetap dipastikan aktif.
+-- - Jangan buat akun kasir pengganti sebelum nama/email final.
+-- - Jangan arsipkan kasir lama sebelum hari kerja terakhir dan serah terima selesai.
+--
+-- Setelah rekrutmen final:
+-- 1. Buat akun kasir baru di Supabase Authentication.
+-- 2. Salin template onboarding kasir di bawah, lalu ganti email/nama sesuai akun final.
+-- 3. Jalankan offboarding kasir lama hanya setelah tanggal keluar benar-benar final.
+--
+-- Catatan: offboarding di public.users hanya menghapus dari roster aplikasi.
+-- Untuk mencegah login, nonaktifkan juga user dari Supabase Authentication dashboard.
 
 create extension if not exists pgcrypto;
 set search_path = public, extensions;
 
 -- Setup Owner Account
-UPDATE auth.users 
-SET raw_user_meta_data =
-  (COALESCE(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('role', 'pemilik')) - 'pin'
-WHERE email = 'amri@raja.pos';
+update auth.users
+set raw_user_meta_data =
+  (coalesce(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('role', 'pemilik')) - 'pin'
+where lower(email) = 'amri@raja.pos';
 
-INSERT INTO public.users (id, nama, role, pin_hash)
-SELECT id, COALESCE(raw_user_meta_data->>'name', 'Amri'), 'pemilik'::public.user_role, crypt('1234', gen_salt('bf'))
-FROM auth.users
-WHERE email = 'amri@raja.pos'
-ON CONFLICT (id) DO UPDATE
-SET nama = EXCLUDED.nama,
-    role = EXCLUDED.role,
-    pin_hash = EXCLUDED.pin_hash;
+insert into public.users (id, nama, role, pin_hash, status, archived_at)
+select id, coalesce(raw_user_meta_data->>'name', 'Amri'), 'pemilik'::public.user_role, crypt('1234', gen_salt('bf')), 'active', null
+from auth.users
+where lower(email) = 'amri@raja.pos'
+on conflict (id) do update
+set nama = excluded.nama,
+    role = excluded.role,
+    pin_hash = excluded.pin_hash,
+    status = 'active',
+    archived_at = null;
 
--- Setup Kasir Account
-UPDATE auth.users 
-SET raw_user_meta_data =
-  (COALESCE(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('role', 'kasir')) - 'pin'
-WHERE email = 'sriyati@raja.pos';
+-- Template onboarding kasir baru.
+-- Aktifkan setelah akun Auth final dibuat.
+--
+-- update auth.users
+-- set raw_user_meta_data =
+--   (coalesce(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('role', 'kasir', 'name', '<nama_kasir>')) - 'pin'
+-- where lower(email) = lower('<email_kasir>');
+--
+-- insert into public.users (id, nama, role, pin_hash, status, archived_at)
+-- select id, coalesce(raw_user_meta_data->>'name', '<nama_kasir>'), 'kasir'::public.user_role, crypt('1234', gen_salt('bf')), 'active', null
+-- from auth.users
+-- where lower(email) = lower('<email_kasir>')
+-- on conflict (id) do update
+-- set nama = excluded.nama,
+--     role = excluded.role,
+--     pin_hash = excluded.pin_hash,
+--     status = 'active',
+--     archived_at = null;
 
-INSERT INTO public.users (id, nama, role, pin_hash)
-SELECT id, COALESCE(raw_user_meta_data->>'name', 'Sriyati'), 'kasir'::public.user_role, crypt('1234', gen_salt('bf'))
-FROM auth.users
-WHERE email = 'sriyati@raja.pos'
-ON CONFLICT (id) DO UPDATE
-SET nama = EXCLUDED.nama,
-    role = EXCLUDED.role,
-    pin_hash = EXCLUDED.pin_hash;
+-- Template offboarding kasir lama.
+-- Jalankan setelah hari kerja terakhir, bukan saat rekrutmen masih proses.
+--
+-- update public.users as app_user
+-- set status = 'archived',
+--     archived_at = coalesce(app_user.archived_at, now())
+-- from auth.users as auth_user
+-- where app_user.id = auth_user.id
+--   and lower(auth_user.email) = lower('<email_kasir_lama>');

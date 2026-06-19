@@ -27,7 +27,7 @@ export const SENSITIVE_ACTIONS = {
     RESOLVE: "Proses retur supplier",
   },
   CUSTOMER_RETURN: {
-    CREATE: "Buat retur konsumen",
+    CREATE: "Buat klaim garansi konsumen",
   },
   SERVICE: {
     CREATE: "Tambah layanan",

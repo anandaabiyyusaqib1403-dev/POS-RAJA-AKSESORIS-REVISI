@@ -44,7 +44,7 @@ export default function CalculatorPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Cash Count"
+        eyebrow="Hitung kas"
         title="Kalkulator laci kas"
         description="Hitung uang fisik per pecahan, lalu cocokkan dengan catatan kas hari itu."
         icon="calculator"

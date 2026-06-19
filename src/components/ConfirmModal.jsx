@@ -17,11 +17,11 @@ export default function ConfirmModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6">
+    <div className="brand-modal-backdrop fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
       <div
-        className={`brand-panel brand-modal-${size} ${
+        className={`brand-modal-surface brand-modal-${size} ${
           destructive ? "brand-modal-destructive" : ""
-        } p-6 shadow-2xl`.trim()}
+        } p-6`.trim()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirmation-modal-title"
