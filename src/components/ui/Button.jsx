@@ -1,32 +1,42 @@
-// src/components/ui/Button.jsx
-import React from 'react';
-
 const Button = ({
   children,
-  variant = 'primary',
-  size = 'md',
-  className = '',
+  variant = "primary",
+  size = "md",
+  fullWidth = false,
+  className = "",
+  type = "button",
   ...props
 }) => {
-  const baseClasses = 'rounded-2xl font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2';
-  
+  const baseClasses =
+    "disabled:cursor-not-allowed disabled:opacity-60";
+
   const variants = {
-    primary: 'bg-primary-500 hover:bg-primary-600 text-white focus:ring-primary-500 shadow-soft',
-    secondary: 'bg-neutral-100 hover:bg-neutral-200 text-neutral-700 focus:ring-neutral-500',
-    accent: 'bg-accent-500 hover:bg-accent-600 text-white focus:ring-accent-500 shadow-soft',
-    outline: 'border border-neutral-300 bg-white hover:bg-neutral-50 text-neutral-700 focus:ring-primary-500',
+    primary: "brand-button-primary",
+    secondary: "brand-button-secondary",
+    accent: "brand-button-success",
+    outline:
+      "inline-flex max-w-full items-center justify-center gap-2 rounded-lg border border-[var(--brand-border)] bg-transparent text-center text-sm font-semibold leading-5 text-[var(--brand-text)] transition hover:border-[rgba(212,175,55,0.36)] hover:bg-[var(--surface-hover)]",
+    danger: "brand-button-danger",
+    warning: "brand-button-warning",
+    ghost:
+      "inline-flex max-w-full items-center justify-center gap-2 rounded-lg bg-transparent text-center text-sm font-semibold leading-5 text-[var(--brand-text-muted)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--brand-text)]",
   };
-  
+
   const sizes = {
-    sm: 'px-3 py-1.5 text-sm',
-    md: 'px-4 py-2 text-base',
-    lg: 'px-6 py-3 text-lg',
-    xl: 'px-8 py-4 text-xl',
+    sm: "min-h-[var(--control-height-sm)] rounded-[var(--button-radius-sm)] px-4 py-2.5 text-sm",
+    md: "min-h-[var(--control-height-md)] rounded-[var(--button-radius-md)] px-5 py-3 text-sm",
+    lg: "min-h-[var(--control-height-lg)] rounded-[var(--button-radius-lg)] px-6 py-3 text-base",
+    xl: "min-h-[var(--control-height-lg)] rounded-[var(--button-radius-lg)] px-7 py-3.5 text-lg",
   };
-  
+
+  const widthClass = fullWidth ? "w-full" : "";
+  const resolvedVariant = variants[variant] || variants.primary;
+  const resolvedSize = sizes[size] || sizes.md;
+
   return (
     <button
-      className={`${baseClasses} ${variants[variant]} ${sizes[size]} ${className}`}
+      type={type}
+      className={`${baseClasses} ${resolvedVariant} ${resolvedSize} ${widthClass} ${className}`.trim()}
       {...props}
     >
       {children}

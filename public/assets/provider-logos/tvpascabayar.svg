@@ -1,0 +1,8 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TV Pascabayar">
+  <rect width="128" height="128" rx="28" fill="#1E293B"/>
+  <rect x="22" y="30" width="84" height="58" rx="12" fill="#F8FAFC"/>
+  <rect x="32" y="40" width="64" height="38" rx="6" fill="#38BDF8"/>
+  <path d="M44 98h40" stroke="#F8FAFC" stroke-width="8" stroke-linecap="round"/>
+  <path d="M58 88v10M70 88v10" stroke="#F8FAFC" stroke-width="8" stroke-linecap="round"/>
+  <path d="M50 58h28M50 68h18" stroke="#0F172A" stroke-width="6" stroke-linecap="round"/>
+</svg>

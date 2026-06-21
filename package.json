@@ -7,16 +7,35 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:money": "node --test tests/money-critical.test.mjs",
+    "test:runtime": "node --test tests/runtime-domain-isolation.test.mjs",
+    "test:performance": "node --test tests/performance-boundaries.test.mjs",
+    "test:ux": "node --test tests/ux-operational-guardrails.test.mjs",
+    "verify:hardening": "node scripts/verify-production-hardening.mjs"
   },
   "dependencies": {
+    "@lottiefiles/dotlottie-web": "^0.71.0",
     "@supabase/supabase-js": "^2.49.8",
+    "@tanstack/react-query": "^5.100.14",
+    "@tanstack/react-table": "^8.21.3",
+    "axios": "^1.16.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
+    "express": "^5.2.1",
     "file-saver": "^2.0.5",
+    "lottie-react": "^2.4.1",
+    "lucide-react": "^1.8.0",
+    "mysql2": "^3.22.0",
     "nodemailer": "^8.0.5",
+    "papaparse": "^5.5.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.8.0",
-    "xlsx": "^0.18.5"
+    "react-window": "^2.2.7",
+    "recharts": "^3.8.1",
+    "zustand": "^5.0.13"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",

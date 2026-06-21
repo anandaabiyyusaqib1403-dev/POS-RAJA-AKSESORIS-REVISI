@@ -92,15 +92,15 @@ begin
     from pg_policies
     where schemaname = 'public'
       and tablename = 'stok_mutasi'
-      and policyname = 'kasir insert stok keluar'
+      and policyname = 'kasir insert stok masuk'
   ) then
-    create policy "kasir insert stok keluar"
+    create policy "kasir insert stok masuk"
     on public.stok_mutasi
     for insert
     to authenticated
     with check (
       public.current_user_role() in ('kasir', 'pemilik')
-      and tipe = 'keluar'
+      and tipe = 'masuk'
     );
   end if;
 end $$;

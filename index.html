@@ -2,12 +2,81 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" href="/src/assets/raja-aksesoris-logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Raja Aksesoris POS</title>
+    <script>
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        if (!params.has("reset") && !params.has("fresh")) return;
+
+        var hardReset =
+          params.get("reset") === "hard" ||
+          params.get("fresh") === "hard" ||
+          params.has("hard_reset");
+
+        function shouldKeepStorageKey(key) {
+          if (key === "raja_pos_receipt_printer_settings") return true;
+          if (key === "raja_pos_last_auth_user") return !hardReset;
+          if (key.indexOf("supabase") !== -1) return !hardReset;
+          if (key.indexOf("auth-token") !== -1) return !hardReset;
+          if (key.indexOf("sb-") === 0) return !hardReset;
+          return false;
+        }
+
+        function cleanStorage(storage) {
+          Object.keys(storage || {}).forEach(function (key) {
+            if (!shouldKeepStorageKey(key)) {
+              storage.removeItem(key);
+            }
+          });
+        }
+
+        try {
+          cleanStorage(window.localStorage);
+        } catch (_) {}
+
+        try {
+          cleanStorage(window.sessionStorage);
+        } catch (_) {}
+
+        try {
+          console.info("Browser recovery cleanup", {
+            preserveAuth: !hardReset,
+            source: "index",
+          });
+        } catch (_) {}
+
+        try {
+          var cleanUrl = new URL(window.location.href);
+          ["reset", "fresh", "hard_reset", "refresh"].forEach(function (key) {
+            cleanUrl.searchParams.delete(key);
+          });
+          window.history.replaceState(
+            null,
+            document.title,
+            cleanUrl.pathname + cleanUrl.search + cleanUrl.hash
+          );
+        } catch (_) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
+
+    <!-- Fallback for browsers / WebViews that don't support ES modules -->
+    <script nomodule>
+      (function(){
+        var root = document.getElementById('root');
+        if(!root) return;
+        root.innerHTML = '<div style="font-family:Arial,Helvetica,sans-serif;padding:28px;line-height:1.4;"><h2 style="margin:0 0 8px 0">Perangkat tidak didukung</h2><p style="margin:0 0 8px 0">Browser atau WebView pada perangkat ini tidak mendukung fitur yang dibutuhkan aplikasi (ES modules). Silakan buka aplikasi dengan browser modern (Chrome/Edge/Safari terbaru) atau hubungi administrator.</p></div>';
+      })();
+    </script>
+
+    <noscript>
+      <div style="font-family:Arial,Helvetica,sans-serif;padding:28px;">Aplikasi membutuhkan JavaScript agar berjalan. Aktifkan JavaScript dan muat ulang halaman.</div>
+    </noscript>
+
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

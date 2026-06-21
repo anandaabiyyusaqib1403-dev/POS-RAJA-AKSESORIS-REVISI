@@ -1,0 +1,14 @@
+.env
+.env.*
+.vscode/
+dist/
+node_modules/
+*.log
+*.err.log
+*.pid
+playwright*.png
+test-results/
+supabase/.temp/
+supabase/migrations-combined.sql
+*.md
+TODO*

@@ -1,896 +1,723 @@
-import { useMemo, useState } from "react";
-import StatCard from "../components/StatCard";
-import { useData } from "../contexts/DataContext";
-import { serviceTypeLabelMap, walletPlatformLabelMap } from "../data/businessOptions";
+import { lazy, Suspense, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import Panel from "../components/app/Panel";
+import AppIcon from "../components/app/AppIcon";
+import { useProducts } from "../hooks/useProducts";
+import { useReports } from "../hooks/useReports";
+import { useShift } from "../hooks/useShift";
 import {
-  downloadCsv,
   formatDateInput,
-  formatDateTime,
-  formatPlainNumber,
+  formatDisplayDate,
   formatRupiah,
-  formatRupiahCsv,
-  parseDateInput,
 } from "../utils/format";
+import {
+  buildOperationalInsights,
+  formatCount,
+  getComparisonLabel,
+  getDashboardRange,
+  getMetricComparison,
+  getPreviousRange,
+  getTrendTextClass,
+  isActiveProduct,
+  isLowStockProduct,
+} from "../features/dashboard/services/dashboardInsights";
+
+const SalesTrendChart = lazy(() => import("../features/dashboard/components/SalesTrendChart"));
 
 const periodOptions = [
-  { value: "today", label: "Hari ini" },
-  { value: "yesterday", label: "Kemarin" },
-  { value: "7", label: "7 hari terakhir" },
-  { value: "month", label: "Bulan ini" },
-  { value: "lastMonth", label: "Bulan lalu" },
-  { value: "year", label: "Tahun ini" },
+  { value: "today", label: "Hari Ini" },
+  { value: "7", label: "7 Hari" },
+  { value: "30", label: "30 Hari" },
   { value: "custom", label: "Custom" },
 ];
 
-const monthNames = [
-  "Januari",
-  "Februari",
-  "Maret",
-  "April",
-  "Mei",
-  "Juni",
-  "Juli",
-  "Agustus",
-  "September",
-  "Oktober",
-  "November",
-  "Desember",
-];
+function KpiCard({ label, value, trend, accent = "default" }) {
+  const valueClass =
+    accent === "success"
+      ? "text-emerald-700"
+      : accent === "danger"
+        ? "text-red-700"
+        : accent === "info"
+          ? "text-blue-700"
+          : "text-slate-950";
 
-function getMonthRange(year, month) {
-  return {
-    startDate: new Date(year, month - 1, 1),
-    endDate: new Date(year, month, 0),
-  };
+  return (
+    <Panel className="p-4">
+      <p className="text-xs font-semibold text-slate-500">
+        {label}
+      </p>
+      <p className={`mt-2 text-2xl font-bold leading-tight tracking-tight ${valueClass}`}>
+        {value}
+      </p>
+      <p className={`mt-2 truncate text-xs font-semibold ${getTrendTextClass(trend?.tone)}`}>
+        {trend?.label || "Stabil"}
+        {trend?.detail ? <span className="font-medium text-slate-500"> - {trend.detail}</span> : null}
+      </p>
+    </Panel>
+  );
 }
 
-function getYearRange(year) {
-  return {
-    startDate: new Date(year, 0, 1),
-    endDate: new Date(year, 11, 31),
-  };
+function RadarItem({ label, value, detail, badge, badgeClass = "brand-badge-neutral" }) {
+  return (
+    <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold text-slate-500">
+          {label}
+        </p>
+        {badge ? <span className={`${badgeClass} shrink-0`}>{badge}</span> : null}
+      </div>
+      <p className="mt-2 truncate text-base font-bold text-slate-950">{value}</p>
+      {detail ? <p className="mt-1 truncate text-xs text-slate-500">{detail}</p> : null}
+    </div>
+  );
 }
 
-function getPeriodRange(period, customRange, selectedYear, selectedMonth) {
-  const today = new Date();
-
-  if (period === "today") return { startDate: today, endDate: today };
-
-  if (period === "yesterday") {
-    const day = new Date(today);
-    day.setDate(today.getDate() - 1);
-    return { startDate: day, endDate: day };
-  }
-
-  if (period === "7") {
-    const startDate = new Date(today);
-    startDate.setDate(today.getDate() - 6);
-    return { startDate, endDate: today };
-  }
-
-  if (period === "month") {
-    return getMonthRange(today.getFullYear(), today.getMonth() + 1);
-  }
-
-  if (period === "lastMonth") {
-    const target = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-    return getMonthRange(target.getFullYear(), target.getMonth() + 1);
-  }
-
-  if (period === "year") {
-    return getYearRange(today.getFullYear());
-  }
-
-  if (period === "quick_month") {
-    return getMonthRange(selectedYear, selectedMonth);
-  }
-
-  if (period === "quick_year") {
-    return getYearRange(selectedYear);
-  }
-
-  return {
-    startDate: parseDateInput(customRange.startDate),
-    endDate: parseDateInput(customRange.endDate),
-  };
-}
-
-function getPeriodLabel(period, range, selectedYear, selectedMonth) {
-  if (period === "today") return "Hari ini";
-  if (period === "yesterday") return "Kemarin";
-  if (period === "7") return "7 hari terakhir";
-  if (period === "year") return String(range.startDate.getFullYear());
-  if (period === "quick_year") return `Tahun ${selectedYear}`;
-  if (["month", "lastMonth", "quick_month"].includes(period)) {
-    const monthIndex =
-      period === "quick_month" ? selectedMonth - 1 : range.startDate.getMonth();
-    const year = period === "quick_month" ? selectedYear : range.startDate.getFullYear();
-    return `${monthNames[monthIndex]} ${year}`;
-  }
-  if (!range.startDate && !range.endDate) return "Semua periode";
-  if (range.startDate && range.endDate) {
-    return `${formatDateInput(range.startDate)} s.d. ${formatDateInput(range.endDate)}`;
-  }
-  if (range.startDate) return `Mulai ${formatDateInput(range.startDate)}`;
-  return `Sampai ${formatDateInput(range.endDate)}`;
-}
-
-function slugifyLabel(value) {
-  return String(value)
-    .toLowerCase()
-    .replaceAll(/[^\w\s-]/g, "")
-    .trim()
-    .replaceAll(/\s+/g, "-");
-}
-
-function TrendLineChart({ data }) {
+function TrendBars({ data }) {
   if (!data.length) {
     return (
-      <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-lg font-bold text-slate-900">Tren omzet</h3>
-        <p className="mt-10 text-center text-sm text-slate-500">
-          Belum ada data omzet pada periode ini.
+      <div className="brand-empty-state">
+        <p className="text-base font-semibold text-slate-950">Belum ada tren penjualan</p>
+        <p className="mt-2 max-w-md text-sm leading-7 text-slate-500">
+          Simpan transaksi di periode ini supaya pergerakan omzet dan laba langsung terbaca.
         </p>
       </div>
     );
   }
 
-  const maxValue = Math.max(...data.map((item) => item.omzet), 1);
-  const points = data
-    .map((item, index) => {
-      const x = (index / Math.max(data.length - 1, 1)) * 100;
-      const y = 100 - (item.omzet / maxValue) * 100;
-      return `${x},${y}`;
-    })
-    .join(" ");
-
   return (
-    <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-bold text-slate-900">Tren omzet</h3>
-          <p className="text-sm text-slate-500">Aksesoris + layanan + logistik</p>
-        </div>
-        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-          {data.length} titik
-        </span>
-      </div>
-
-      <svg viewBox="0 0 100 100" className="h-56 w-full" preserveAspectRatio="none">
-        <defs>
-          <linearGradient id="omzet-gradient" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.45" />
-            <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <polyline
-          fill="none"
-          stroke="#1e3a5f"
-          strokeWidth="2"
-          vectorEffect="non-scaling-stroke"
-          points={points}
-        />
-        <polygon fill="url(#omzet-gradient)" points={`0,100 ${points} 100,100`} />
-      </svg>
-
-      <div
-        className="mt-3 grid gap-1 text-center text-[11px] text-slate-500"
-        style={{ gridTemplateColumns: `repeat(${Math.max(data.length, 1)}, minmax(0, 1fr))` }}
-      >
-        {data.map((item) => (
-          <span key={item.key} className="truncate">
-            {item.label}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ProfitExpenseChart({ data }) {
-  if (!data.length) {
-    return (
-      <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-lg font-bold text-slate-900">Laba bersih vs pengeluaran</h3>
-        <p className="mt-10 text-center text-sm text-slate-500">
-          Belum ada data kas dan laba pada periode ini.
-        </p>
-      </div>
-    );
-  }
-
-  const maxValue = Math.max(
-    ...data.flatMap((item) => [Math.abs(item.laba_bersih), Math.abs(item.pengeluaran)]),
-    1
-  );
-
-  return (
-    <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-4">
-        <h3 className="text-lg font-bold text-slate-900">Laba bersih vs pengeluaran</h3>
-        <p className="text-sm text-slate-500">Per banding waktu dalam periode aktif</p>
-      </div>
-
-      <div className="flex h-56 items-end gap-3 overflow-x-auto pb-2">
-        {data.map((item) => (
-          <div key={item.key} className="flex min-w-[72px] flex-1 flex-col items-center gap-2">
-            <div className="flex h-full items-end gap-2">
-              <div className="flex flex-col items-center justify-end gap-2">
-                <div
-                  className={`w-5 rounded-t-full ${
-                    item.laba_bersih >= 0 ? "bg-emerald-500" : "bg-red-400"
-                  }`}
-                  style={{
-                    height: `${Math.max((Math.abs(item.laba_bersih) / maxValue) * 180, 6)}px`,
-                  }}
-                />
-                <span className="text-[11px] font-semibold text-slate-500">L</span>
-              </div>
-              <div className="flex flex-col items-center justify-end gap-2">
-                <div
-                  className="w-5 rounded-t-full bg-amber-400"
-                  style={{
-                    height: `${Math.max((item.pengeluaran / maxValue) * 180, 6)}px`,
-                  }}
-                />
-                <span className="text-[11px] font-semibold text-slate-500">P</span>
-              </div>
-            </div>
-            <span className="text-center text-[11px] text-slate-500">{item.label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function buildWalletTotal(summaryRows) {
-  return summaryRows.reduce(
-    (acc, item) => {
-      acc.masuk += item.masuk;
-      acc.keluar += item.keluar;
-      acc.biaya_admin += item.biaya_admin;
-      acc.saldo_bersih += item.saldo_bersih;
-      return acc;
-    },
-    { masuk: 0, keluar: 0, biaya_admin: 0, saldo_bersih: 0 }
-  );
-}
-
-function buildLogisticsTotal(summaryRows) {
-  return summaryRows.reduce(
-    (acc, item) => {
-      acc.jumlah_transaksi += item.jumlah_transaksi;
-      acc.omzet += item.omzet;
-      acc.modal += item.modal;
-      acc.keuntungan += item.keuntungan;
-      return acc;
-    },
-    { jumlah_transaksi: 0, omzet: 0, modal: 0, keuntungan: 0 }
+    <Suspense fallback={<div className="brand-skeleton h-[280px] w-full" aria-label="Memuat grafik tren" />}>
+      <SalesTrendChart data={data} />
+    </Suspense>
   );
 }
 
 export default function Dashboard() {
   const {
-    loading,
-    accessoryTransactions,
-    digitalTransactions,
-    logisticsTransactions,
-    walletTransactions,
-    cashEntries,
+    coreLoading,
+    coreError,
+    walletBalances = [],
+    supplierReturns = [],
+    customerReturns = [],
     getDashboardSummary,
-  } = useData();
-  const today = new Date();
+  } = useReports();
+  const { products } = useProducts();
+  const { activeShifts, shifts = [] } = useShift();
   const [period, setPeriod] = useState("today");
   const [customRange, setCustomRange] = useState({
-    startDate: formatDateInput(today),
-    endDate: formatDateInput(today),
+    startDate: formatDateInput(new Date()),
+    endDate: formatDateInput(new Date()),
   });
-  const [selectedYear, setSelectedYear] = useState(today.getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(today.getMonth() + 1);
 
-  const yearOptions = useMemo(() => {
-    const years = new Set([today.getFullYear()]);
-    accessoryTransactions.forEach((transaction) =>
-      years.add(new Date(transaction.created_at).getFullYear())
-    );
-    digitalTransactions.forEach((transaction) =>
-      years.add(new Date(transaction.created_at).getFullYear())
-    );
-    logisticsTransactions.forEach((transaction) =>
-      years.add(new Date(transaction.created_at).getFullYear())
-    );
-    walletTransactions.forEach((transaction) =>
-      years.add(new Date(transaction.created_at).getFullYear())
-    );
-    cashEntries.forEach((entry) => years.add(parseDateInput(entry.tanggal).getFullYear()));
-    return Array.from(years).sort((left, right) => right - left);
-  }, [
-    accessoryTransactions,
-    cashEntries,
-    digitalTransactions,
-    logisticsTransactions,
-    today,
-    walletTransactions,
-  ]);
+  const range = useMemo(() => getDashboardRange(period, customRange), [customRange, period]);
+  const previousRange = useMemo(() => getPreviousRange(range), [range]);
+  const todayRange = useMemo(() => getDashboardRange("today", customRange), [customRange]);
 
-  const range = useMemo(
-    () => getPeriodRange(period, customRange, selectedYear, selectedMonth),
-    [customRange, period, selectedMonth, selectedYear]
-  );
   const summary = useMemo(() => getDashboardSummary(range), [getDashboardSummary, range]);
-  const periodLabel = useMemo(
-    () => getPeriodLabel(period, range, selectedYear, selectedMonth),
-    [period, range, selectedMonth, selectedYear]
+  const todaySummary = useMemo(
+    () => getDashboardSummary(todayRange),
+    [getDashboardSummary, todayRange]
   );
-  const walletTotal = useMemo(
-    () => buildWalletTotal(summary.walletPlatformSummary),
-    [summary.walletPlatformSummary]
+  const previousSummary = useMemo(
+    () => getDashboardSummary(previousRange),
+    [getDashboardSummary, previousRange]
   );
-  const logisticsTotal = useMemo(
-    () => buildLogisticsTotal(summary.logisticsSummary),
-    [summary.logisticsSummary]
+  const comparisonLabel = getComparisonLabel(period);
+  const metricTrends = useMemo(
+    () => ({
+      omzet: getMetricComparison(summary.omzet, previousSummary.omzet, formatRupiah, comparisonLabel),
+      labaBersih: getMetricComparison(
+        summary.labaBersih,
+        previousSummary.labaBersih,
+        formatRupiah,
+        comparisonLabel
+      ),
+      totalTransaksi: getMetricComparison(
+        summary.totalTransaksi,
+        previousSummary.totalTransaksi,
+        formatCount,
+        comparisonLabel
+      ),
+      produkTerjual: getMetricComparison(
+        summary.produkTerjual,
+        previousSummary.produkTerjual,
+        (value) => `${formatCount(value)} pcs`,
+        comparisonLabel
+      ),
+    }),
+    [comparisonLabel, previousSummary, summary]
   );
 
-  const exportReport = () => {
-    const rows = [];
-    const generatedAt = formatDateTime(new Date(), {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
-    const accessoryDetailRows = summary.accessoryTransactions.flatMap((transaction) =>
-      (transaction.items || []).map((item) => [
-        formatDateTime(transaction.created_at, {
-          dateStyle: "short",
-          timeStyle: "short",
-        }),
-        transaction.no_transaksi,
-        transaction.kasir_id || "",
-        transaction.metode_bayar || "",
-        item.nama_produk,
-        item.qty,
-        formatRupiahCsv(item.harga_satuan),
-        formatRupiahCsv(item.subtotal),
-        formatRupiahCsv(transaction.total_bayar),
-      ])
-    );
+  const bestCategory = summary.topCategories[0] || null;
 
-    rows.push(["Section 1 - Ringkasan Periode"]);
-    rows.push(["Periode", periodLabel]);
-    rows.push(["Mulai", range.startDate ? formatDateInput(range.startDate) : "-"]);
-    rows.push(["Selesai", range.endDate ? formatDateInput(range.endDate) : "-"]);
-    rows.push(["Digenerate", generatedAt]);
-    rows.push(["Total Omzet", formatRupiahCsv(summary.omzet)]);
-    rows.push(["Total Keuntungan Kotor", formatRupiahCsv(summary.keuntunganKotor)]);
-    rows.push(["Total Pengeluaran Kas", formatRupiahCsv(summary.totalPengeluaranKas)]);
-    rows.push(["Laba Bersih", formatRupiahCsv(summary.labaBersih)]);
-    rows.push(["Total Transaksi", summary.totalTransaksi]);
-    rows.push(["Produk Terjual", summary.produkTerjual]);
-    rows.push([]);
+  const trendSeries = useMemo(() => summary.trendSeries.slice(-7), [summary.trendSeries]);
 
-    rows.push(["Section 2 - Breakdown Per Layanan"]);
-    rows.push(["Layanan", "Omzet", "Modal", "Keuntungan", "Jumlah Transaksi", "Kontribusi"]);
-    summary.breakdown.forEach((item) => {
-      rows.push([
-        item.label,
-        formatRupiahCsv(item.omzet),
-        formatRupiahCsv(item.modal),
-        formatRupiahCsv(item.keuntungan),
-        item.transaksi,
-        `${item.kontribusi}%`,
-      ]);
-    });
-    rows.push([]);
+  const lowStockProducts = useMemo(
+    () =>
+      products
+        .filter((product) => isActiveProduct(product) && isLowStockProduct(product))
+        .sort((left, right) => Number(left.stok || 0) - Number(right.stok || 0)),
+    [products]
+  );
+  const criticalStockCount = useMemo(
+    () => lowStockProducts.filter((product) => Number(product.stok || 0) <= 0).length,
+    [lowStockProducts]
+  );
+  const pendingShiftCount = useMemo(
+    () => shifts.filter((shift) => shift.status === "pending" || shift.status === "flagged").length,
+    [shifts]
+  );
+  const shiftDifferenceAlerts = useMemo(
+    () =>
+      shifts.filter(
+        (shift) =>
+          (shift.status === "pending" || shift.status === "flagged") &&
+          Math.abs(Number(shift.difference || 0)) >= 50000
+      ),
+    [shifts]
+  );
+  const criticalWallets = useMemo(
+    () =>
+      (walletBalances || [])
+        .filter((wallet) => wallet.id !== "cash" && Number(wallet.balance || 0) <= 0)
+        .sort((left, right) => Number(left.balance || 0) - Number(right.balance || 0)),
+    [walletBalances]
+  );
+  const pendingReturnCount = useMemo(() => {
+    const supplierPending = (supplierReturns || []).filter((row) =>
+      ["draft", "pending", "open", "waiting"].includes(String(row.status || "").toLowerCase())
+    ).length;
+    const customerPending = (customerReturns || []).filter((row) =>
+      ["draft", "pending", "open", "waiting"].includes(String(row.status || "").toLowerCase())
+    ).length;
 
-    rows.push(["Section 3 - Detail Transaksi Aksesoris"]);
-    rows.push([
-      "Waktu",
-      "No. Transaksi",
-      "Kasir ID",
-      "Metode Bayar",
-      "Produk",
-      "Qty",
-      "Harga Satuan",
-      "Subtotal Item",
-      "Total Transaksi",
-    ]);
-    accessoryDetailRows.forEach((row) => rows.push(row));
-    rows.push([]);
+    return supplierPending + customerPending;
+  }, [customerReturns, supplierReturns]);
+  const cashWalletBalance = Number(walletBalances.find((wallet) => wallet.id === "cash")?.balance || 0);
 
-    rows.push(["Section 4 - Detail Transaksi Layanan"]);
-    rows.push([
-      "Waktu",
-      "No. Transaksi",
-      "Jenis Layanan",
-      "Provider / Bank / Platform",
-      "Nomor Tujuan / Rekening / ID",
-      "Nama Tujuan / Penerima",
-      "Platform Sumber Toko",
-      "Nominal",
-      "Harga Jual",
-      "Modal",
-      "Keuntungan",
-    ]);
-    summary.digitalTransactions.forEach((transaction) => {
-      rows.push([
-        formatDateTime(transaction.created_at, { dateStyle: "short", timeStyle: "short" }),
-        transaction.no_transaksi,
-        serviceTypeLabelMap[transaction.jenis] || transaction.jenis,
-        transaction.provider,
-        transaction.nomor_tujuan,
-        transaction.nama_tujuan || "",
-        transaction.platform_sumber
-          ? walletPlatformLabelMap[transaction.platform_sumber] || transaction.platform_sumber
-          : "",
-        formatRupiahCsv(transaction.nominal),
-        formatRupiahCsv(transaction.harga_jual),
-        formatRupiahCsv(transaction.modal),
-        formatRupiahCsv(
-          transaction.keuntungan ?? transaction.harga_jual - transaction.modal
-        ),
-      ]);
-    });
-    rows.push([]);
+  const cashSnapshots = useMemo(
+    () =>
+      [...summary.cashDailySummary]
+        .sort((left, right) => String(right.tanggal).localeCompare(String(left.tanggal)))
+        .slice(0, 5),
+    [summary.cashDailySummary]
+  );
 
-    rows.push(["Section 5 - Detail Transaksi Logistik"]);
-    rows.push([
-      "Waktu",
-      "No. Transaksi",
-      "Ekspedisi",
-      "Harga Jual",
-      "Modal",
-      "Keuntungan",
-      "No. Resi",
-      "Catatan",
-    ]);
-    summary.logisticsTransactions.forEach((transaction) => {
-      rows.push([
-        formatDateTime(transaction.created_at, { dateStyle: "short", timeStyle: "short" }),
-        transaction.no_transaksi,
-        transaction.ekspedisi,
-        formatRupiahCsv(transaction.harga_jual),
-        formatRupiahCsv(transaction.modal),
-        formatRupiahCsv(
-          transaction.keuntungan ?? transaction.harga_jual - transaction.modal
-        ),
-        transaction.no_resi || "",
-        transaction.catatan || "",
-      ]);
-    });
-    rows.push([]);
-
-    rows.push(["Section 6 - Rekap Dompet Per Platform"]);
-    rows.push(["Platform", "Total Masuk", "Total Keluar", "Biaya Admin", "Saldo Bersih"]);
-    summary.walletPlatformSummary.forEach((item) => {
-      rows.push([
-        walletPlatformLabelMap[item.platform] || item.platform,
-        formatRupiahCsv(item.masuk),
-        formatRupiahCsv(item.keluar),
-        formatRupiahCsv(item.biaya_admin),
-        formatRupiahCsv(item.saldo_bersih),
-      ]);
-    });
-    rows.push([
-      "TOTAL",
-      formatRupiahCsv(walletTotal.masuk),
-      formatRupiahCsv(walletTotal.keluar),
-      formatRupiahCsv(walletTotal.biaya_admin),
-      formatRupiahCsv(walletTotal.saldo_bersih),
-    ]);
-    rows.push([]);
-
-    rows.push(["Section 7 - Detail Transaksi Dompet"]);
-    rows.push([
-      "Waktu",
-      "Platform",
-      "Jenis",
-      "Platform Tujuan",
-      "Nominal",
-      "Biaya Admin",
-      "Keterangan",
-    ]);
-    summary.walletTransactions.forEach((transaction) => {
-      rows.push([
-        formatDateTime(transaction.created_at, { dateStyle: "short", timeStyle: "short" }),
-        walletPlatformLabelMap[transaction.platform] || transaction.platform,
-        transaction.jenis,
-        transaction.platform_tujuan
-          ? walletPlatformLabelMap[transaction.platform_tujuan] || transaction.platform_tujuan
-          : "",
-        formatRupiahCsv(transaction.nominal),
-        formatRupiahCsv(transaction.biaya_admin),
-        transaction.keterangan || "",
-      ]);
-    });
-    rows.push([]);
-
-    rows.push(["Section 8 - Detail Kas"]);
-    rows.push(["Tanggal", "Jenis", "Kategori", "Nominal", "Keterangan", "Created At"]);
-    summary.cashEntries.forEach((entry) => {
-      rows.push([
-        entry.tanggal,
-        entry.jenis,
-        entry.kategori,
-        formatRupiahCsv(entry.nominal),
-        entry.keterangan || "",
-        formatDateTime(entry.created_at, { dateStyle: "short", timeStyle: "short" }),
-      ]);
-    });
-    rows.push([]);
-
-    rows.push(["Section 9 - Top 5 Produk Terlaris"]);
-    rows.push(["Nama Produk", "Qty"]);
-    summary.topProducts.forEach((item) => {
-      rows.push([item.nama, item.qty]);
-    });
-
-    downloadCsv(`laporan-raja-aksesoris-${slugifyLabel(periodLabel)}.csv`, rows);
-  };
-
-  if (loading) {
-    return <div className="rounded-3xl bg-white p-8 text-slate-600">Memuat dashboard...</div>;
-  }
+  const rangeLabel =
+    period === "today"
+      ? formatDisplayDate(range.startDate)
+      : `${formatDisplayDate(range.startDate)} - ${formatDisplayDate(range.endDate)}`;
+  const activeCashierLines = activeShifts.map(
+    (shift) => `${shift.cashier_name || "Kasir"} • ${shift.cashier_station || "Station belum dipilih"}`
+  );
+  const shiftValue = activeShifts.length
+    ? `${activeShifts.length} Kasir Aktif`
+    : "Belum ada kasir aktif";
+  const shiftDetail = activeShifts.length
+    ? activeCashierLines.slice(0, 2).join(" | ")
+    : "Buka shift untuk mulai transaksi";
+  const stockAlertValue = lowStockProducts.length
+    ? `${criticalStockCount} habis, ${Math.max(lowStockProducts.length - criticalStockCount, 0)} menipis`
+    : "Semua stok aman";
+  const averageTransaction = summary.totalTransaksi
+    ? formatRupiah(summary.omzet / summary.totalTransaksi)
+    : formatRupiah(0);
+  const ownerAlerts = [
+    shiftDifferenceAlerts.length
+      ? {
+          title: "Selisih shift besar",
+          value: `${shiftDifferenceAlerts.length} shift`,
+          detail: "Closing memiliki mismatch kas yang perlu keputusan sebelum laporan dipercaya.",
+          tone: "danger",
+          urgency: "BLOCKER",
+          action: "Review shift",
+          to: "/shift?status=pending&risk=mismatch",
+        }
+      : null,
+    criticalWallets.length
+      ? {
+          title: "Saldo kritis ekstrem",
+          value: criticalWallets
+            .slice(0, 2)
+            .map((wallet) => wallet.name || wallet.id)
+            .join(", "),
+          detail: `${criticalWallets.length} wallet perlu top up atau rekonsiliasi.`,
+          tone: "danger",
+          urgency: "BLOCKER",
+          action: "Buka saldo",
+          to: "/saldo?filter=critical",
+        }
+      : null,
+    pendingShiftCount && !shiftDifferenceAlerts.length
+      ? {
+          title: "Approval shift pending",
+          value: `${pendingShiftCount} shift`,
+          detail: "Review closing shift sebelum laporan harian dikunci.",
+          tone: "warning",
+          urgency: "FINANCE",
+          action: "Review shift",
+          to: "/shift?status=pending",
+        }
+      : null,
+    lowStockProducts.length
+      ? {
+          title: "Stok minimum",
+          value: `${lowStockProducts.length} item`,
+          detail: `${criticalStockCount} habis, cek rak dan rekomendasi reorder.`,
+          tone: criticalStockCount ? "danger" : "warning",
+          urgency: "STOCK",
+          action: "Lihat stok minimum",
+          to: "/stok-barang?status=minimum#tambah-kelola",
+        }
+      : null,
+    pendingReturnCount
+      ? {
+          title: "Retur pending",
+          value: `${pendingReturnCount} retur`,
+          detail: "Retur belum selesai dapat mengganggu stok dan laba.",
+          tone: "warning",
+          urgency: "RETURN",
+          action: "Proses retur",
+          to: "/retur-supplier?status=pending",
+        }
+      : null,
+  ].filter(Boolean);
+  const ownerQuickActions = [
+    {
+      to: "/shift",
+      icon: "history",
+      label: "Shift",
+      detail: pendingShiftCount ? `${pendingShiftCount} perlu review` : activeShifts.length ? `${activeShifts.length} kasir aktif` : "Buka shift",
+      urgent: pendingShiftCount > 0,
+    },
+    {
+      to: "/stok-barang",
+      icon: "box",
+      label: "Stok",
+      detail: lowStockProducts.length ? `${lowStockProducts.length} perlu dicek` : "Stok aman",
+      urgent: lowStockProducts.length > 0,
+    },
+    {
+      to: "/saldo",
+      icon: "wallet",
+      label: "Kas dan saldo",
+      detail: criticalWallets.length ? `${criticalWallets.length} saldo kritis` : formatRupiah(cashWalletBalance),
+      urgent: criticalWallets.length > 0,
+    },
+    {
+      to: "/retur-supplier",
+      icon: "return",
+      label: "Retur",
+      detail: pendingReturnCount ? `${pendingReturnCount} pending` : "Tidak ada pending",
+      urgent: pendingReturnCount > 0,
+    },
+  ];
+  const operationalInsights = useMemo(
+    () =>
+      buildOperationalInsights({
+        summary,
+        lowStockProducts,
+        criticalWallets,
+        shiftDifferenceAlerts,
+        pendingReturnCount,
+      }),
+    [criticalWallets, lowStockProducts, pendingReturnCount, shiftDifferenceAlerts, summary]
+  );
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-[32px] bg-gradient-to-br from-[#1e3a5f] via-[#25486f] to-sky-500 p-6 text-white shadow-xl">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.3em] text-sky-100">
-              Dashboard Laporan 2.0
-            </p>
-            <h2 className="mt-2 text-3xl font-black">Pusat analisis bisnis Raja Aksesoris</h2>
-            <p className="mt-2 text-sm text-sky-50/90">
-              {periodLabel} | Omzet gabungan aksesoris, layanan, logistik, plus rekap dompet
-              internal dan kas harian.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {periodOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setPeriod(option.value)}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                  option.value === period
-                    ? "bg-white text-[#1e3a5f]"
-                    : "bg-white/10 text-white hover:bg-white/20"
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={exportReport}
-              className="rounded-full bg-amber-300 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-200"
-            >
-              Export CSV
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-3 xl:grid-cols-[1fr_auto]">
-          {period === "custom" ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <input
-                type="date"
-                value={customRange.startDate}
-                onChange={(event) =>
-                  setCustomRange((prev) => ({ ...prev, startDate: event.target.value }))
-                }
-                className="rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-white outline-none"
-              />
-              <input
-                type="date"
-                value={customRange.endDate}
-                onChange={(event) =>
-                  setCustomRange((prev) => ({ ...prev, endDate: event.target.value }))
-                }
-                className="rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-white outline-none"
-              />
-            </div>
-          ) : (
-            <div className="hidden xl:block" />
-          )}
-
-          <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto]">
-            <select
-              value={selectedMonth}
-              onChange={(event) => setSelectedMonth(Number(event.target.value))}
-              className="rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-white outline-none"
-            >
-              {monthNames.map((month, index) => (
-                <option key={month} value={index + 1} className="text-slate-900">
-                  {month}
-                </option>
-              ))}
-            </select>
-            <select
-              value={selectedYear}
-              onChange={(event) => setSelectedYear(Number(event.target.value))}
-              className="rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-white outline-none"
-            >
-              {yearOptions.map((year) => (
-                <option key={year} value={year} className="text-slate-900">
-                  {year}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => setPeriod("quick_month")}
-              className="rounded-2xl bg-white/10 px-4 py-3 text-sm font-semibold text-white hover:bg-white/20"
-            >
-              Lihat Bulan
-            </button>
-            <button
-              type="button"
-              onClick={() => setPeriod("quick_year")}
-              className="rounded-2xl bg-white/10 px-4 py-3 text-sm font-semibold text-white hover:bg-white/20"
-            >
-              Lihat Tahun
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <StatCard title="Total Omzet" value={summary.omzet} money />
-        <StatCard title="Total Keuntungan Kotor" value={summary.keuntunganKotor} money />
-        <StatCard title="Total Pengeluaran Kas" value={summary.totalPengeluaranKas} money />
-        <StatCard title="Laba Bersih" value={summary.labaBersih} money />
-        <StatCard title="Total Transaksi" value={formatPlainNumber(summary.totalTransaksi)} />
-        <StatCard title="Produk Terjual" value={`${formatPlainNumber(summary.produkTerjual)} pcs`} />
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <TrendLineChart data={summary.trendSeries} />
-        <ProfitExpenseChart data={summary.trendSeries} />
-      </section>
-
-      <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="mb-6">
-          <h3 className="text-2xl font-black text-[#1e3a5f]">Breakdown omzet per layanan</h3>
-          <p className="mt-2 text-sm text-slate-500">
-            Kontribusi aksesoris, layanan, dan logistik terhadap omzet periode aktif.
+    <div className="space-y-5">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-xs font-semibold text-slate-500">
+            Periode laporan
+          </p>
+          <p className="mt-1 text-sm font-semibold text-slate-950">
+            {rangeLabel} - pembanding {comparisonLabel}
           </p>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-3">
-          {summary.breakdown.map((item) => (
-            <div key={item.key} className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                    {item.label}
-                  </p>
-                  <p className="mt-2 text-2xl font-black text-[#1e3a5f]">
-                    {formatRupiah(item.omzet)}
-                  </p>
+        <div className="brand-segmented w-full self-start md:w-auto md:self-auto">
+          {periodOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setPeriod(option.value)}
+              className={`brand-segmented-button ${
+                period === option.value ? "brand-segmented-button-active" : ""
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {period === "custom" ? (
+        <Panel variant="muted" className="grid gap-3 p-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">Dari tanggal</label>
+            <input
+              type="date"
+              value={customRange.startDate}
+              onChange={(event) =>
+                setCustomRange((prev) => ({ ...prev, startDate: event.target.value }))
+              }
+              className="brand-input"
+            />
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
+              Sampai tanggal
+            </label>
+            <input
+              type="date"
+              value={customRange.endDate}
+              onChange={(event) =>
+                setCustomRange((prev) => ({ ...prev, endDate: event.target.value }))
+              }
+              className="brand-input"
+            />
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <p className="text-xs font-semibold text-slate-500">
+              Pembanding
+            </p>
+            <p className="mt-1 text-sm font-semibold text-slate-950">
+              {formatDisplayDate(previousRange.startDate)} sampai{" "}
+              {formatDisplayDate(previousRange.endDate)}
+            </p>
+          </div>
+        </Panel>
+      ) : null}
+
+      {coreLoading || coreError ? (
+        <Panel className={`p-4 ${coreError ? "border-amber-200 bg-amber-50" : ""}`}>
+          <p className="text-sm font-semibold text-slate-700">
+            {coreError
+              ? `Data inti belum lengkap: ${coreError}`
+              : "Data inti sedang disinkronkan di belakang layar."}
+          </p>
+        </Panel>
+      ) : null}
+
+      <Panel variant="strong" className="p-4">
+        <div className="flex flex-col gap-1 border-b border-slate-200 pb-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-sm font-bold text-slate-950">Kontrol Pemilik</p>
+            <p className="text-xs text-slate-500">
+              Alert yang langsung perlu keputusan operasional.
+            </p>
+          </div>
+          <span className={ownerAlerts.length ? "brand-badge-danger" : "brand-badge-success"}>
+            {ownerAlerts.length ? `${ownerAlerts.length} perlu dicek` : "Aman"}
+          </span>
+        </div>
+
+        {ownerAlerts.length ? (
+          <div className="mt-3 space-y-3">
+            {ownerAlerts.map((alert, index) => (
+              <div
+                key={alert.title}
+                className={`brand-alert-command brand-alert-command-${alert.tone}`}
+              >
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className={alert.tone === "danger" ? "brand-badge-danger" : "brand-badge-warning"}>
+                    {index + 1}. {alert.urgency}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-950">{alert.title}</p>
+                    <p className="mt-1 text-xl font-black text-slate-950">{alert.value}</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">{alert.detail}</p>
+                  </div>
                 </div>
-                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm">
-                  {item.kontribusi}%
+                <Link to={alert.to} className="brand-button-primary shrink-0">
+                  {alert.action}
+                </Link>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-semibold text-emerald-700">
+            Tidak ada shift pending, stok kritis, saldo minus, atau retur pending pada periode ini.
+          </div>
+        )}
+      </Panel>
+
+      <section className="space-y-3" aria-label="Snapshot hari ini">
+        <div>
+          <p className="text-sm font-bold text-slate-950">Snapshot Hari Ini</p>
+          <p className="text-xs text-slate-500">Angka utama untuk pengecekan hari ini.</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <KpiCard label="Omzet Hari Ini" value={formatRupiah(todaySummary.omzet)} />
+          <KpiCard label="Transaksi" value={formatCount(todaySummary.totalTransaksi)} accent="info" />
+          <KpiCard label="Laba Bersih" value={formatRupiah(todaySummary.labaBersih)} accent={todaySummary.labaBersih >= 0 ? "success" : "danger"} />
+          <KpiCard label="Saldo Kas" value={formatRupiah(cashWalletBalance)} />
+          <KpiCard label="Kasir Aktif" value={String(activeShifts.length)} accent="success" />
+        </div>
+      </section>
+
+      <section className="space-y-3" aria-label="Tindakan cepat pemilik">
+        <div className="flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-sm font-bold text-slate-950">Tindakan Cepat</p>
+            <p className="text-xs text-slate-500">Buka area yang perlu diselesaikan sekarang.</p>
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {ownerQuickActions.map((action) => (
+            <Link
+              key={action.to}
+              to={action.to}
+              className={`flex min-h-[72px] items-center gap-3 rounded-lg border bg-white px-4 py-3 transition hover:border-[var(--brand-gold)]/45 hover:bg-[var(--brand-surface-tint)] ${
+                action.urgent ? "border-amber-200" : "border-slate-200"
+              }`}
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+                <AppIcon name={action.icon} className="h-5 w-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-bold text-slate-950">{action.label}</span>
+                <span className={`block truncate text-xs font-semibold ${action.urgent ? "text-amber-700" : "text-slate-500"}`}>
+                  {action.detail}
                 </span>
-              </div>
-
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200">
-                <div
-                  className="h-full rounded-full bg-[#1e3a5f]"
-                  style={{ width: `${item.kontribusi}%` }}
-                />
-              </div>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div>
-                  <p className="text-xs text-slate-500">Modal</p>
-                  <p className="font-semibold text-slate-900">{formatRupiah(item.modal)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Keuntungan</p>
-                  <p className="font-semibold text-emerald-700">
-                    {formatRupiah(item.keuntungan)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Jumlah transaksi</p>
-                  <p className="font-semibold text-slate-900">{item.transaksi} trx</p>
-                </div>
-              </div>
-            </div>
+              </span>
+            </Link>
           ))}
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-2">
-        <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-2xl font-black text-[#1e3a5f]">Rekap dompet internal per platform</h3>
-          <p className="mt-2 text-sm text-slate-500">
-            Posisi saldo bersih dihitung dari masuk, keluar, dan biaya admin.
-          </p>
-
-          <div className="mt-5 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="text-slate-500">
-                <tr>
-                  <th className="px-3 py-2">Platform</th>
-                  <th className="px-3 py-2 text-right">Total Masuk</th>
-                  <th className="px-3 py-2 text-right">Total Keluar</th>
-                  <th className="px-3 py-2 text-right">Biaya Admin</th>
-                  <th className="px-3 py-2 text-right">Saldo Bersih</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.walletPlatformSummary.map((item) => (
-                  <tr key={item.platform} className="border-t border-slate-100">
-                    <td className="px-3 py-3 font-semibold text-slate-900">
-                      {walletPlatformLabelMap[item.platform] || item.platform}
-                    </td>
-                    <td className="px-3 py-3 text-right text-slate-600">
-                      {formatRupiah(item.masuk)}
-                    </td>
-                    <td className="px-3 py-3 text-right text-slate-600">
-                      {formatRupiah(item.keluar)}
-                    </td>
-                    <td className="px-3 py-3 text-right text-slate-600">
-                      {formatRupiah(item.biaya_admin)}
-                    </td>
-                    <td className="px-3 py-3 text-right font-semibold text-slate-900">
-                      {formatRupiah(item.saldo_bersih)}
-                    </td>
-                  </tr>
-                ))}
-                <tr className="border-t border-slate-200 bg-slate-50">
-                  <td className="px-3 py-3 font-bold text-slate-900">TOTAL</td>
-                  <td className="px-3 py-3 text-right font-bold text-slate-900">
-                    {formatRupiah(walletTotal.masuk)}
-                  </td>
-                  <td className="px-3 py-3 text-right font-bold text-slate-900">
-                    {formatRupiah(walletTotal.keluar)}
-                  </td>
-                  <td className="px-3 py-3 text-right font-bold text-slate-900">
-                    {formatRupiah(walletTotal.biaya_admin)}
-                  </td>
-                  <td className="px-3 py-3 text-right font-bold text-slate-900">
-                    {formatRupiah(walletTotal.saldo_bersih)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+      <Panel className="p-4">
+        <div className="flex flex-col gap-1 border-b border-slate-200 pb-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-sm font-bold text-slate-950">Radar Operasional</p>
+            <p className="text-xs text-slate-500">Ringkasan cepat untuk keputusan harian.</p>
           </div>
         </div>
 
-        <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-2xl font-black text-[#1e3a5f]">Rekap logistik per ekspedisi</h3>
-          <p className="mt-2 text-sm text-slate-500">
-            Bandingkan omzet, modal, dan margin masing-masing ekspedisi.
-          </p>
-
-          <div className="mt-5 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="text-slate-500">
-                <tr>
-                  <th className="px-3 py-2">Ekspedisi</th>
-                  <th className="px-3 py-2 text-right">Jml Transaksi</th>
-                  <th className="px-3 py-2 text-right">Omzet</th>
-                  <th className="px-3 py-2 text-right">Modal</th>
-                  <th className="px-3 py-2 text-right">Keuntungan</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.logisticsSummary.map((item) => (
-                  <tr key={item.ekspedisi} className="border-t border-slate-100">
-                    <td className="px-3 py-3 font-semibold text-slate-900">{item.ekspedisi}</td>
-                    <td className="px-3 py-3 text-right text-slate-600">
-                      {item.jumlah_transaksi}
-                    </td>
-                    <td className="px-3 py-3 text-right text-slate-600">
-                      {formatRupiah(item.omzet)}
-                    </td>
-                    <td className="px-3 py-3 text-right text-slate-600">
-                      {formatRupiah(item.modal)}
-                    </td>
-                    <td className="px-3 py-3 text-right font-semibold text-emerald-700">
-                      {formatRupiah(item.keuntungan)}
-                    </td>
-                  </tr>
-                ))}
-                <tr className="border-t border-slate-200 bg-slate-50">
-                  <td className="px-3 py-3 font-bold text-slate-900">TOTAL</td>
-                  <td className="px-3 py-3 text-right font-bold text-slate-900">
-                    {logisticsTotal.jumlah_transaksi}
-                  </td>
-                  <td className="px-3 py-3 text-right font-bold text-slate-900">
-                    {formatRupiah(logisticsTotal.omzet)}
-                  </td>
-                  <td className="px-3 py-3 text-right font-bold text-slate-900">
-                    {formatRupiah(logisticsTotal.modal)}
-                  </td>
-                  <td className="px-3 py-3 text-right font-bold text-emerald-700">
-                    {formatRupiah(logisticsTotal.keuntungan)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-[repeat(4,minmax(0,1fr))]">
+          <RadarItem
+            label="Kasir Aktif"
+            value={shiftValue}
+            detail={shiftDetail}
+            badge={activeShifts.length ? "Aktif" : "Belum aktif"}
+            badgeClass={activeShifts.length ? "brand-badge-success" : "brand-badge-neutral"}
+          />
+          <RadarItem
+            label="Alert stok"
+            value={stockAlertValue}
+            detail={lowStockProducts.length ? `${lowStockProducts.length} item perlu dicek` : "Di atas batas minimum"}
+            badge={lowStockProducts.length ? `${lowStockProducts.length} item` : "Aman"}
+            badgeClass={lowStockProducts.length ? "brand-badge-danger" : "brand-badge-success"}
+          />
+          <RadarItem
+            label="Kategori terkuat"
+            value={bestCategory ? bestCategory.nama : "-"}
+            detail={bestCategory ? `${bestCategory.kontribusi}% kontribusi pcs` : "Belum ada data"}
+          />
+          <RadarItem
+            label="Rata-rata transaksi"
+            value={averageTransaction}
+            detail={`${formatCount(summary.totalTransaksi)} transaksi`}
+          />
         </div>
-      </section>
+      </Panel>
 
-      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-2xl font-black text-[#1e3a5f]">Laporan kas harian</h3>
-          <p className="mt-2 text-sm text-slate-500">
-            Saldo awal, pemasukan, pengeluaran, dan sisa saldo per hari dalam periode aktif.
-          </p>
-
-          <div className="mt-5 max-h-[420px] overflow-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="sticky top-0 bg-white text-slate-500">
-                <tr>
-                  <th className="px-3 py-2">Tanggal</th>
-                  <th className="px-3 py-2 text-right">Saldo Awal</th>
-                  <th className="px-3 py-2 text-right">Total Pemasukan</th>
-                  <th className="px-3 py-2 text-right">Total Pengeluaran</th>
-                  <th className="px-3 py-2 text-right">Sisa Saldo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.cashDailySummary.map((item) => (
-                  <tr key={item.tanggal} className="border-t border-slate-100">
-                    <td className="px-3 py-3 font-semibold text-slate-900">{item.tanggal}</td>
-                    <td className="px-3 py-3 text-right text-slate-600">
-                      {formatRupiah(item.saldo_awal)}
-                    </td>
-                    <td className="px-3 py-3 text-right text-slate-600">
-                      {formatRupiah(item.total_pemasukan)}
-                    </td>
-                    <td className="px-3 py-3 text-right text-slate-600">
-                      {formatRupiah(item.total_pengeluaran)}
-                    </td>
-                    <td className="px-3 py-3 text-right font-semibold text-slate-900">
-                      {formatRupiah(item.sisa_saldo)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <Panel className="p-4">
+        <div className="mb-4 flex flex-col gap-1 border-b border-slate-200 pb-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="brand-kicker">Catatan hari ini</p>
+            <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-950">
+              Hal yang perlu dicek
+            </h3>
           </div>
+          <span className="brand-badge-neutral">Dari data toko</span>
         </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {operationalInsights.map((insight) => (
+            <div
+              key={insight.title}
+              className={`brand-control-alert brand-control-alert-${insight.tone}`}
+            >
+              <p className="text-xs font-bold text-slate-500">
+                {insight.title}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">{insight.detail}</p>
+            </div>
+          ))}
+        </div>
+      </Panel>
 
-        <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-2xl font-black text-[#1e3a5f]">Top 5 produk terlaris</h3>
-          <p className="mt-2 text-sm text-slate-500">
-            Produk aksesoris dengan jumlah penjualan tertinggi pada periode aktif.
-          </p>
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+        <Panel className="p-4">
+          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="brand-kicker">Penjualan</p>
+              <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-950">
+                Pergerakan omzet
+              </h3>
+            </div>
+            <p className="text-sm text-slate-500">
+              Dibanding {comparisonLabel}:{" "}
+              <span className="font-semibold text-slate-700">
+                {metricTrends.omzet.detail}
+              </span>
+            </p>
+          </div>
+          <TrendBars data={trendSeries} />
+        </Panel>
 
-          <div className="mt-5 space-y-3">
-            {summary.topProducts.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-500">
-                Belum ada penjualan aksesoris untuk periode ini.
-              </div>
-            ) : (
-              summary.topProducts.map((item, index) => (
-                <div
-                  key={item.nama}
-                  className="flex items-center justify-between rounded-[24px] bg-slate-50 px-4 py-4"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1e3a5f] text-sm font-bold text-white">
-                      {index + 1}
-                    </span>
-                    <div>
-                      <p className="font-semibold text-slate-900">{item.nama}</p>
-                      <p className="text-xs text-slate-500">Produk aksesoris</p>
+        <Panel className="p-4">
+          <div className="mb-4">
+            <p className="brand-kicker">Kategori</p>
+            <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-950">
+              Kategori dan produk terlaris
+            </h3>
+          </div>
+
+          {summary.topCategories.length === 0 ? (
+            <div className="brand-empty-state">
+              <p className="text-base font-semibold text-slate-950">Belum ada penjualan aksesoris</p>
+              <p className="mt-2 text-sm leading-7 text-slate-500">
+                Saat transaksi pertama masuk, kategori dan produk teratas langsung tersusun di sini.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                {summary.topCategories.map((item, index) => (
+                  <div key={item.nama} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--brand-gold)]/14 text-sm font-bold text-[var(--brand-gold-strong)]">
+                          {index + 1}
+                        </span>
+                        <div>
+                          <p className="font-semibold text-slate-950">{item.nama}</p>
+                          <p className="text-sm text-slate-500">
+                            {item.qty} pcs - {formatRupiah(item.omzet)}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="brand-badge-neutral">{item.kontribusi}%</span>
+                    </div>
+                    <div className="mt-3 h-2 rounded-full bg-slate-200">
+                      <div
+                        className="h-2 rounded-full bg-[var(--brand-gold)]"
+                        style={{ width: `${Math.max(item.kontribusi, 8)}%` }}
+                      />
                     </div>
                   </div>
-                  <span className="text-sm font-semibold text-slate-600">{item.qty} pcs</span>
+                ))}
+              </div>
+
+              {summary.topProducts.length ? (
+                <div>
+                  <p className="brand-kicker mb-3">Produk teratas</p>
+                  <div className="space-y-3">
+                    {summary.topProducts.slice(0, 3).map((item, index) => (
+                      <div
+                        key={item.nama}
+                        className="flex items-center justify-between gap-4 border-t border-slate-200 pt-3"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-sm font-bold text-slate-600">
+                            {index + 1}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold text-slate-950">{item.nama}</p>
+                            <p className="text-sm text-slate-500">{item.category || "Aksesoris"}</p>
+                          </div>
+                        </div>
+                        <span className="brand-badge-neutral shrink-0">{item.qty} pcs</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))
-            )}
+              ) : null}
+            </div>
+          )}
+        </Panel>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+        <Panel className="p-4">
+          <div className="mb-4">
+            <p className="brand-kicker">Kanal penjualan</p>
+            <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-950">
+              Kontribusi per kanal
+            </h3>
           </div>
-        </div>
-      </section>
+
+          <div className="space-y-2">
+            {summary.breakdown.map((item) => (
+              <div key={item.key} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-semibold text-slate-950">{item.label}</p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {item.transaksi} transaksi - laba {formatRupiah(item.keuntungan)}
+                    </p>
+                  </div>
+                  <span className="brand-badge-neutral">{item.kontribusi}%</span>
+                </div>
+                <div className="mt-3 h-2 rounded-full bg-slate-200">
+                  <div
+                    className="h-2 rounded-full bg-[var(--brand-gold)]"
+                    style={{ width: `${Math.max(item.kontribusi, item.omzet ? 8 : 0)}%` }}
+                  />
+                </div>
+                <p className="mt-3 text-sm font-semibold text-slate-700">
+                  {formatRupiah(item.omzet)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel variant="strong" className="p-4">
+          <div className="mb-4">
+            <p className="brand-kicker">Kas harian</p>
+            <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-950">
+              Arus kas harian
+            </h3>
+          </div>
+
+          {cashSnapshots.length === 0 ? (
+            <div className="brand-empty-state">
+              <p className="text-base font-semibold text-slate-950">Belum ada arus kas harian</p>
+              <p className="mt-2 text-sm leading-7 text-slate-500">
+                Catatan pemasukan dan pengeluaran operasional akan tampil di sini.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {cashSnapshots.map((item) => (
+                <div
+                  key={item.tanggal}
+                  className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 p-3"
+                >
+                  <div>
+                    <p className="font-semibold text-slate-950">{item.tanggal}</p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Masuk {formatRupiah(item.total_pemasukan)} - Keluar{" "}
+                      {formatRupiah(item.total_pengeluaran)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-semibold text-slate-400">
+                      Sisa saldo
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-slate-950">
+                      {formatRupiah(item.sisa_saldo)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+      </div>
     </div>
   );
 }
+
