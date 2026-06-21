@@ -1,5 +1,7 @@
 # Raja Aksesoris POS
 
+Repository: https://github.com/anandaabiyyusaqib1403-dev/POS-RAJA-AKSESORIS-REVISI
+
 Website Point of Sale untuk counter HP Raja Aksesoris dengan alur kasir, input transaksi digital, manajemen produk, dashboard laporan, dan cetak struk thermal 58mm.
 
 ## Stack
